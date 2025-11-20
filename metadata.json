@@ -1,0 +1,5 @@
+{
+  "name": "Azure Architect Mate",
+  "description": "An AI-powered assistant for generating best-practice Azure PowerShell configurations and troubleshooting deployment issues.",
+  "requestFramePermissions": []
+}
