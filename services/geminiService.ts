@@ -1,41 +1,13 @@
-import { GoogleGenAI, Type, Schema } from "@google/genai";
 import { GeneratedResult } from '../types';
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
-// Schema for structured output when generating scripts
-const scriptResponseSchema: Schema = {
-  type: Type.OBJECT,
-  properties: {
-    script: {
-      type: Type.STRING,
-      description: 'The complete, executable PowerShell script.',
-    },
-    explanation: {
-      type: Type.STRING,
-      description: 'A Markdown formatted explanation of the script, highlighting best practices used.',
-    },
-    variables: {
-      type: Type.OBJECT,
-      description: 'Key-value pairs of variables defined in the script for easy user reference.',
-      additionalProperties: { type: Type.STRING }
-    },
-    troubleshootingSteps: {
-      type: Type.ARRAY,
-      description: 'A list of 3-5 potential issues or validation steps for this configuration.',
-      items: { type: Type.STRING }
-    }
-  },
-  required: ['script', 'explanation', 'variables']
-};
+const OLLAMA_BASE_URL = 'http://localhost:11434';
 
 export const generateConfig = async (
   title: string, 
   userRequirements: string, 
-  contextVars: Record<string, string> = {}
+  contextVars: Record<string, string> = {},
+  modelName: string = 'llama3'
 ): Promise<GeneratedResult> => {
-  
-  const model = 'gemini-2.5-flash';
   
   const prompt = `
     You are an expert Azure DevOps Engineer and PowerShell scripting wizard.
@@ -52,65 +24,92 @@ export const generateConfig = async (
     4. Use meaningful variable names.
     5. Follow Microsoft Cloud Adoption Framework best practices.
     6. Ensure the script is idempotent if possible.
+
+    Output Requirement:
+    You MUST respond with a valid JSON object exactly matching this structure:
+    {
+      "script": "string (the complete PowerShell script)",
+      "explanation": "string (markdown explanation of best practices used)",
+      "variables": { "key": "value" } (object of variables defined in script),
+      "troubleshootingSteps": ["step1", "step2"] (array of validation steps)
+    }
   `;
 
   try {
-    const response = await ai.models.generateContent({
-      model,
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: scriptResponseSchema,
-        temperature: 0.2, // Low temperature for code precision
-      }
+    const response = await fetch(`${OLLAMA_BASE_URL}/api/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: modelName,
+        prompt: prompt,
+        format: 'json', // Force JSON mode
+        stream: false
+      })
     });
 
-    const jsonStr = response.text || "{}";
-    return JSON.parse(jsonStr) as GeneratedResult;
+    if (!response.ok) {
+        throw new Error(`Ollama API Error: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    const jsonStr = data.response;
+    
+    // Basic parsing, Ollama usually returns the JSON object in 'response'
+    try {
+        return JSON.parse(jsonStr) as GeneratedResult;
+    } catch (e) {
+        console.error("Failed to parse JSON from Ollama:", jsonStr);
+        // Fallback attempt to extract JSON from text if model is chatty
+        const match = jsonStr.match(/\{[\s\S]*\}/);
+        if (match) {
+            return JSON.parse(match[0]) as GeneratedResult;
+        }
+        throw new Error("Invalid JSON response from model");
+    }
 
   } catch (error) {
-    console.error("Gemini generation error:", error);
-    throw new Error("Failed to generate configuration. Please check your API key and try again.");
+    console.error("Ollama generation error:", error);
+    throw new Error(`Failed to generate configuration. Ensure Ollama is running at ${OLLAMA_BASE_URL} and the model '${modelName}' is pulled.`);
   }
 };
 
 export const troubleshootIssue = async (
   issueDescription: string,
-  history: { role: string; text: string }[]
+  history: { role: string; text: string }[],
+  modelName: string = 'llama3'
 ): Promise<string> => {
   
-  const model = 'gemini-2.5-flash';
+  const systemPrompt = `You are an expert Azure Troubleshooting Assistant. Provide concise, step-by-step troubleshooting guides. Return response in Markdown.`;
   
-  // Convert history to prompt format if needed, or just send as context
-  // For simplicity in this strict format, we'll append history to the prompt text
-  const historyText = history.map(h => `${h.role.toUpperCase()}: ${h.text}`).join('\n');
-  
-  const prompt = `
-    You are an expert Azure Troubleshooting Assistant.
-    
-    Conversation History:
-    ${historyText}
-    
-    Current User Issue: ${issueDescription}
-    
-    Provide a concise, step-by-step troubleshooting guide. 
-    If applicable, provide specific PowerShell commands to diagnose the issue (e.g., Test-NetConnection, Get-AzLog).
-    Format the response in Markdown.
-  `;
+  // Map history to Ollama format (role: user/assistant)
+  const messages = [
+      { role: 'system', content: systemPrompt },
+      ...history.map(h => ({
+          role: h.role === 'model' ? 'assistant' : 'user',
+          content: h.text
+      })),
+      { role: 'user', content: issueDescription }
+  ];
 
   try {
-    const response = await ai.models.generateContent({
-      model,
-      contents: prompt,
-      config: {
-         // No schema here, we want freeform chat response
-         temperature: 0.4
-      }
+    const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: modelName,
+        messages: messages,
+        stream: false
+      })
     });
 
-    return response.text || "I couldn't generate a solution at this time.";
+    if (!response.ok) {
+         throw new Error(`Ollama API Error: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    return data.message?.content || "I couldn't generate a solution at this time.";
   } catch (error) {
-    console.error("Gemini troubleshooting error:", error);
-    return "Error contacting the troubleshooting assistant.";
+    console.error("Ollama troubleshooting error:", error);
+    return `Error contacting Ollama at ${OLLAMA_BASE_URL}. Ensure it is running locally.`;
   }
 };

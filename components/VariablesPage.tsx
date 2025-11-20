@@ -1,7 +1,6 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { GlobalVariables } from '../types';
-import { Save, Settings, Tag, Globe, MapPin, Briefcase, User, Layers, HelpCircle } from 'lucide-react';
+import { Save, Settings, Tag, Globe, MapPin, Briefcase, User, Layers, HelpCircle, Cpu, Loader2, Check } from 'lucide-react';
 
 interface VariablesPageProps {
   config: GlobalVariables;
@@ -10,22 +9,39 @@ interface VariablesPageProps {
 
 const VariablesPage: React.FC<VariablesPageProps> = ({ config, onSave }) => {
   const [formData, setFormData] = useState<GlobalVariables>(config);
-  const [saved, setSaved] = useState(false);
+  const [status, setStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  
+  // Ref to hold the timeout ID so we can clear it
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+  }, []);
 
   const handleChange = (key: keyof GlobalVariables, value: string) => {
-    setFormData(prev => ({ ...prev, [key]: value }));
-    setSaved(false);
-  };
+    const newConfig = { ...formData, [key]: value };
+    setFormData(newConfig);
+    setStatus('saving');
 
-  const handleSave = () => {
-    onSave(formData);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+
+    // Auto-save after 1 second of inactivity
+    timeoutRef.current = setTimeout(() => {
+      onSave(newConfig);
+      setStatus('saved');
+      // Reset to idle after showing "Saved" for a bit
+      setTimeout(() => setStatus('idle'), 2000);
+    }, 1000);
   };
 
   return (
     <div className="flex flex-col h-full bg-slate-950 overflow-y-auto">
-      <div className="h-16 border-b border-slate-800 flex items-center px-8 bg-slate-950 sticky top-0 z-10">
+      <div className="h-16 border-b border-slate-800 flex items-center justify-between px-8 bg-slate-950 sticky top-0 z-10">
          <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-purple-500/10 border border-purple-500/20">
                 <Settings className="w-5 h-5 text-purple-500" />
@@ -34,6 +50,18 @@ const VariablesPage: React.FC<VariablesPageProps> = ({ config, onSave }) => {
                 <h2 className="text-xl font-bold text-white">Global Configuration</h2>
                 <p className="text-sm text-slate-500">Define naming conventions and tags applied to all scripts</p>
             </div>
+        </div>
+        <div className="flex items-center gap-3">
+            {status === 'saving' && (
+                <span className="flex items-center gap-2 text-xs text-blue-400 animate-pulse">
+                    <Loader2 className="w-3 h-3 animate-spin" /> Saving changes...
+                </span>
+            )}
+            {status === 'saved' && (
+                <span className="flex items-center gap-2 text-xs text-emerald-400 animate-in fade-in slide-in-from-right-4">
+                    <Check className="w-3 h-3" /> All changes saved
+                </span>
+            )}
         </div>
       </div>
 
@@ -133,6 +161,36 @@ const VariablesPage: React.FC<VariablesPageProps> = ({ config, onSave }) => {
             </div>
         </div>
 
+        {/* AI Settings Section */}
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+             <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                <Cpu className="w-5 h-5 text-pink-500" />
+                Local AI (Ollama)
+            </h3>
+            <div className="flex items-start gap-6">
+                <div className="flex-1">
+                    <label className="block text-sm font-medium text-slate-400 mb-1">
+                        Ollama Model Name
+                    </label>
+                    <input 
+                        type="text" 
+                        value={formData.ollamaModel}
+                        onChange={(e) => handleChange('ollamaModel', e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:outline-none font-mono text-sm placeholder-slate-700"
+                        placeholder="llama3"
+                    />
+                    <p className="text-xs text-slate-500 mt-2">
+                        Ensure this model is pulled locally: <code>ollama pull {formData.ollamaModel || 'llama3'}</code>
+                    </p>
+                </div>
+                <div className="flex-1 bg-slate-950 rounded-lg border border-slate-800 p-4">
+                    <p className="text-xs text-slate-400 leading-relaxed">
+                        <span className="text-pink-500 font-semibold">Note:</span> Ensure Ollama is running at <code className="bg-slate-800 px-1 rounded">http://localhost:11434</code>. If you are running this app in a container or remote environment, update your browser/network settings to allow local connection.
+                    </p>
+                </div>
+            </div>
+        </div>
+
         {/* Advanced Performance Section */}
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
             <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
@@ -167,15 +225,6 @@ const VariablesPage: React.FC<VariablesPageProps> = ({ config, onSave }) => {
                     </p>
                 </div>
             </div>
-        </div>
-
-        <div className="mt-8 flex justify-end pb-8">
-            <button
-                onClick={handleSave}
-                className={`flex items-center gap-2 px-6 py-3 rounded-lg font-semibold text-white transition-all ${saved ? 'bg-emerald-600' : 'bg-blue-600 hover:bg-blue-500'}`}
-            >
-                {saved ? <div className="flex items-center gap-2">Configuration Saved!</div> : <div className="flex items-center gap-2"><Save className="w-4 h-4" /> Save Global Config</div>}
-            </button>
         </div>
       </div>
     </div>

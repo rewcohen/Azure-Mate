@@ -85,6 +85,7 @@ export interface GlobalVariables {
   costCenter: string;
   owner: string;
   proximityPlacementGroup: string;
+  ollamaModel: string;
 }
 
 // Cost Estimation Types

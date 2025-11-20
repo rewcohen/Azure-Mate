@@ -1,4 +1,7 @@
 
+
+
+
 import { CostBreakdown, CostItem } from "../types";
 
 /**
@@ -39,6 +42,11 @@ const PRICING_CATALOG: Record<string, number> = {
     'Bastion (Standard)': 211.70, // $0.29/hr
     'Front Door (Standard Base)': 35.00,
     'Front Door (Data Process 1TB)': 10.00, // Estimate
+    'VPN Gateway (VpnGw1)': 138.70, // ~$0.19/hr
+    'VPN Gateway (VpnGw2)': 262.80, // ~$0.36/hr
+    'NAT Gateway (Standard)': 32.85, // ~$0.045/hr
+    'NAT Data (Per GB)': 0.045, 
+    'VNet Peering (Per GB)': 0.01, 
 
     // Storage
     'OS Disk (P10 - 128GB)': 19.71,
@@ -48,6 +56,30 @@ const PRICING_CATALOG: Record<string, number> = {
     'Storage Capacity (Hot LRS)': 0.02, // Per GB
     'Storage Capacity (Hot GRS)': 0.04, // Per GB
     'Azure Files (Standard)': 0.06, // Per GB
+
+    // Security
+    'Key Vault (Premium Base)': 10.00, // Roughly estimated monthly base if actively used
+    'Azure Firewall (Basic)': 288.00, // ~$0.395/hr
+    'Azure Firewall (Standard)': 912.00, // ~$1.25/hr
+    'Azure Firewall (Premium)': 1277.00, // ~$1.75/hr
+    'App Gateway (WAF v2)': 320.00, // ~$0.44/hr fixed
+    'Log Analytics (Per GB)': 2.30,
+    'Sentinel (Per GB Analysis)': 2.00, // On top of LA
+
+    // Serverless
+    'Static Web App (Standard)': 9.00,
+    'Container Apps (vCPU)': 25.00, // Approx active monthly 
+    'Container Apps (Memory)': 6.00,  // Approx active monthly
+
+    // Integration
+    'Logic App (WS1)': 175.00, // Approx
+    'Logic App (WS2)': 350.00,
+    'Logic App (WS3)': 700.00,
+    'APIM (Developer)': 48.00,
+    'APIM (Standard)': 147.00,
+    'APIM (Premium)': 2795.00,
+    'Service Bus (Standard Base)': 10.00, // Base charge
+    'Service Bus (Ops 1M)': 0.05,
 };
 
 /**
@@ -79,6 +111,96 @@ export const calculateScenarioCost = (
                 total: PRICING_CATALOG['OS Disk (P10 - 128GB)']
             });
             items.push({
+                resourceName: 'Public IP',
+                sku: 'Standard Static',
+                unitPrice: PRICING_CATALOG['Public IP (Standard)'],
+                quantity: 1,
+                total: PRICING_CATALOG['Public IP (Standard)']
+            });
+            break;
+        }
+
+        case 'vm-windows-secure': {
+            const size = inputs['vmSize'] || 'Standard_D2s_v3';
+            const basePrice = PRICING_CATALOG[size] || 70.08;
+            // Estimated Windows License (Usually ~46% of base compute for standard instances)
+            const licenseCost = basePrice * 0.46; 
+            
+            items.push({
+                resourceName: 'Virtual Machine (Base)',
+                sku: size,
+                unitPrice: basePrice,
+                quantity: 1,
+                total: basePrice
+            });
+             items.push({
+                resourceName: 'Windows Server License',
+                sku: 'Pay-as-you-go',
+                unitPrice: licenseCost,
+                quantity: 1,
+                total: licenseCost
+            });
+            items.push({
+                resourceName: 'OS Disk',
+                sku: 'Premium SSD P10',
+                unitPrice: PRICING_CATALOG['OS Disk (P10 - 128GB)'],
+                quantity: 1,
+                total: PRICING_CATALOG['OS Disk (P10 - 128GB)']
+            });
+            items.push({
+                resourceName: 'Public IP',
+                sku: 'Standard Static',
+                unitPrice: PRICING_CATALOG['Public IP (Standard)'],
+                quantity: 1,
+                total: PRICING_CATALOG['Public IP (Standard)']
+            });
+            break;
+        }
+
+        case 'vmss-autoscale': {
+            const size = inputs['vmSize'] || 'Standard_B1s';
+            const minCount = Number(inputs['minCount'] || 1);
+            const price = PRICING_CATALOG[size] || 7.59;
+            
+            // Calculate based on Min Instances (conservative estimate)
+            items.push({
+                resourceName: 'VMSS Instances (Min)',
+                sku: size,
+                unitPrice: price,
+                quantity: minCount,
+                total: price * minCount
+            });
+            items.push({
+                resourceName: 'Load Balancer',
+                sku: 'Standard',
+                unitPrice: 0.025 * 730, // Approx monthly rule cost if active
+                quantity: 1,
+                total: 0.025 * 730
+            });
+            break;
+        }
+
+        case 'vm-spot-linux': {
+            const size = inputs['vmSize'] || 'Standard_D2s_v3';
+            const basePrice = PRICING_CATALOG[size] || 70.08;
+            // Spot instances are typically 60-90% cheaper. Using 80% discount as average estimate.
+            const spotPrice = basePrice * 0.20; 
+
+            items.push({
+                resourceName: 'Spot Virtual Machine',
+                sku: `${size} (Spot Priority)`,
+                unitPrice: spotPrice,
+                quantity: 1,
+                total: spotPrice
+            });
+            items.push({
+                resourceName: 'OS Disk',
+                sku: 'Standard SSD', // Usually use cheaper disk for spot
+                unitPrice: PRICING_CATALOG['OS Disk (P10 - 128GB)'] * 0.6, // Rough diff
+                quantity: 1,
+                total: PRICING_CATALOG['OS Disk (P10 - 128GB)'] * 0.6
+            });
+             items.push({
                 resourceName: 'Public IP',
                 sku: 'Standard Static',
                 unitPrice: PRICING_CATALOG['Public IP (Standard)'],
@@ -147,6 +269,58 @@ export const calculateScenarioCost = (
             });
             break;
         }
+
+        case 'function-app-consumption': {
+             items.push({
+                resourceName: 'Function App Compute',
+                sku: 'Consumption (Pay-as-you-go)',
+                unitPrice: 0,
+                quantity: 1,
+                total: 0 // First 1M executions free generally covers dev/test
+            });
+            // Functions require storage
+            const storageSku = 'Standard_LRS';
+            const storagePrice = PRICING_CATALOG['Storage Capacity (Hot LRS)'] * 5; // Low usage
+            items.push({
+                resourceName: 'Storage Account',
+                sku: storageSku,
+                unitPrice: storagePrice,
+                quantity: 1,
+                total: storagePrice
+            });
+            break;
+        }
+
+        case 'static-web-app': {
+            const sku = inputs['sku'] || 'Free';
+            const price = sku === 'Standard' ? PRICING_CATALOG['Static Web App (Standard)'] : 0;
+            items.push({
+                resourceName: 'Static Web App',
+                sku: sku,
+                unitPrice: price,
+                quantity: 1,
+                total: price
+            });
+            break;
+        }
+
+        case 'container-apps': {
+             items.push({
+                resourceName: 'CA Environment (Log Analytics)',
+                sku: 'Ingestion (Est. 2GB)',
+                unitPrice: PRICING_CATALOG['Log Analytics (Per GB)'],
+                quantity: 2,
+                total: PRICING_CATALOG['Log Analytics (Per GB)'] * 2
+            });
+             items.push({
+                resourceName: 'App Replicas (Active)',
+                sku: 'vCPU/Memory (Est. 0.5 core / 1GB)',
+                unitPrice: (PRICING_CATALOG['Container Apps (vCPU)'] * 0.5) + PRICING_CATALOG['Container Apps (Memory)'],
+                quantity: 1,
+                total: (PRICING_CATALOG['Container Apps (vCPU)'] * 0.5) + PRICING_CATALOG['Container Apps (Memory)']
+            });
+            break;
+        }
         
         case 'frontdoor-std': {
             items.push({
@@ -155,6 +329,63 @@ export const calculateScenarioCost = (
                 unitPrice: PRICING_CATALOG['Front Door (Standard Base)'],
                 quantity: 1,
                 total: PRICING_CATALOG['Front Door (Standard Base)']
+            });
+            break;
+        }
+
+        case 'network-hub-spoke': {
+            items.push({
+                resourceName: 'VNet Peering Traffic (Est.)',
+                sku: 'Intra-Region Data Transfer',
+                unitPrice: PRICING_CATALOG['VNet Peering (Per GB)'],
+                quantity: 100, // Est 100GB
+                total: PRICING_CATALOG['VNet Peering (Per GB)'] * 100
+            });
+            break;
+        }
+
+        case 'network-vpn-gateway': {
+            const sku = inputs['sku'] || 'VpnGw1';
+            const key = `VPN Gateway (${sku})`;
+            const price = PRICING_CATALOG[key] || 138.70;
+            items.push({
+                resourceName: 'VPN Gateway',
+                sku: sku,
+                unitPrice: price,
+                quantity: 1,
+                total: price
+            });
+             items.push({
+                resourceName: 'Public IP',
+                sku: 'Standard',
+                unitPrice: PRICING_CATALOG['Public IP (Standard)'],
+                quantity: 1,
+                total: PRICING_CATALOG['Public IP (Standard)']
+            });
+            break;
+        }
+
+        case 'network-nat-gateway': {
+            items.push({
+                resourceName: 'NAT Gateway',
+                sku: 'Standard',
+                unitPrice: PRICING_CATALOG['NAT Gateway (Standard)'],
+                quantity: 1,
+                total: PRICING_CATALOG['NAT Gateway (Standard)']
+            });
+             items.push({
+                resourceName: 'Data Processing (Est. 100GB)',
+                sku: 'Outbound Data',
+                unitPrice: PRICING_CATALOG['NAT Data (Per GB)'],
+                quantity: 100,
+                total: PRICING_CATALOG['NAT Data (Per GB)'] * 100
+            });
+             items.push({
+                resourceName: 'Public IP',
+                sku: 'Standard',
+                unitPrice: PRICING_CATALOG['Public IP (Standard)'],
+                quantity: 1,
+                total: PRICING_CATALOG['Public IP (Standard)']
             });
             break;
         }
@@ -229,6 +460,151 @@ export const calculateScenarioCost = (
                  total: unitPrice * quota
              });
              break;
+        }
+
+        case 'identity-uami':
+        case 'identity-sp':
+        case 'identity-rbac': {
+             items.push({
+                 resourceName: 'Azure Active Directory Object',
+                 sku: 'Free (Included)',
+                 unitPrice: 0.00,
+                 quantity: 1,
+                 total: 0.00
+             });
+             break;
+        }
+
+        case 'kv-standard': {
+            const sku = String(inputs['sku'] || 'Standard');
+            if (sku === 'Premium') {
+                items.push({
+                    resourceName: 'Key Vault',
+                    sku: 'Premium (HSM Backed)',
+                    unitPrice: PRICING_CATALOG['Key Vault (Premium Base)'],
+                    quantity: 1,
+                    total: PRICING_CATALOG['Key Vault (Premium Base)']
+                });
+            } else {
+                 items.push({
+                    resourceName: 'Key Vault',
+                    sku: 'Standard',
+                    unitPrice: 0.03, // Nominal operations cost
+                    quantity: 1,
+                    total: 0.03
+                });
+            }
+            break;
+        }
+
+        case 'azure-firewall': {
+            const sku = String(inputs['sku'] || 'Standard');
+            const key = `Azure Firewall (${sku})`;
+            const price = PRICING_CATALOG[key] || 912.00;
+            
+            items.push({
+                resourceName: 'Azure Firewall',
+                sku: sku,
+                unitPrice: price,
+                quantity: 1,
+                total: price
+            });
+            items.push({
+                resourceName: 'Data Processing (Est. 100GB)',
+                sku: 'Standard',
+                unitPrice: 0.016, // per GB
+                quantity: 100,
+                total: 1.60
+            });
+            break;
+        }
+
+        case 'app-gateway-waf': {
+             const price = PRICING_CATALOG['App Gateway (WAF v2)'];
+             items.push({
+                resourceName: 'Application Gateway',
+                sku: 'WAF v2',
+                unitPrice: price,
+                quantity: 1,
+                total: price
+            });
+            items.push({
+                resourceName: 'Capacity Units (Est)',
+                sku: 'Autoscale Unit',
+                unitPrice: 0.008 * 730, // approx monthly per CU
+                quantity: 5, // Avg load
+                total: (0.008 * 730) * 5
+            });
+            break;
+        }
+
+        case 'sentinel-starter': {
+            items.push({
+                resourceName: 'Log Analytics Ingestion',
+                sku: 'Pay-as-you-go',
+                unitPrice: PRICING_CATALOG['Log Analytics (Per GB)'],
+                quantity: 5, // Est 5GB/day * 30? No, 5GB total for demo
+                total: PRICING_CATALOG['Log Analytics (Per GB)'] * 5
+            });
+             items.push({
+                resourceName: 'Microsoft Sentinel Analysis',
+                sku: 'Pay-as-you-go',
+                unitPrice: PRICING_CATALOG['Sentinel (Per GB Analysis)'],
+                quantity: 5, 
+                total: PRICING_CATALOG['Sentinel (Per GB Analysis)'] * 5
+            });
+            break;
+        }
+
+        case 'logic-app-standard': {
+            const sku = inputs['sku'] || 'WS1';
+            const price = PRICING_CATALOG[`Logic App (${sku})`] || 175.00;
+            items.push({
+                resourceName: 'Workflow Standard Plan',
+                sku: sku,
+                unitPrice: price,
+                quantity: 1,
+                total: price
+            });
+             items.push({
+                resourceName: 'Storage Account',
+                sku: 'Standard_LRS',
+                unitPrice: PRICING_CATALOG['Storage Capacity (Hot LRS)'] * 50, // More storage usage than consumption
+                quantity: 1,
+                total: PRICING_CATALOG['Storage Capacity (Hot LRS)'] * 50
+            });
+            break;
+        }
+
+        case 'apim-standard': {
+            const sku = inputs['sku'] || 'Developer';
+            const price = PRICING_CATALOG[`APIM (${sku})`] || 48.00;
+            items.push({
+                resourceName: 'API Management',
+                sku: sku,
+                unitPrice: price,
+                quantity: 1,
+                total: price
+            });
+            break;
+        }
+
+        case 'service-bus-standard': {
+             items.push({
+                resourceName: 'Service Bus Namespace',
+                sku: 'Standard',
+                unitPrice: PRICING_CATALOG['Service Bus (Standard Base)'],
+                quantity: 1,
+                total: PRICING_CATALOG['Service Bus (Standard Base)']
+            });
+            items.push({
+                resourceName: 'Operations (Est 5M)',
+                sku: 'Standard',
+                unitPrice: PRICING_CATALOG['Service Bus (Ops 1M)'],
+                quantity: 5,
+                total: PRICING_CATALOG['Service Bus (Ops 1M)'] * 5
+            });
+            break;
         }
 
         default:

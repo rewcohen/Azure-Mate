@@ -65,7 +65,13 @@ const Generator: React.FC<GeneratorProps> = ({ selectedCategory, azureContext, g
     if (!customPrompt) return;
     setLoading(true);
     try {
-        const res = await generateConfig("Custom Azure Configuration", customPrompt, {});
+        // Using Ollama service with configured model
+        const res = await generateConfig(
+          "Custom Azure Configuration", 
+          customPrompt, 
+          {}, 
+          globalVars.ollamaModel
+        );
         setResult(res);
         setStep('result');
     } catch (e) {
@@ -190,12 +196,12 @@ const Generator: React.FC<GeneratorProps> = ({ selectedCategory, azureContext, g
                 >
                   <div className="flex items-start justify-between mb-3">
                     <span className="text-xs font-medium px-2 py-1 rounded bg-blue-900/30 text-blue-300 border border-blue-800/50">
-                      AI Powered
+                      AI Powered ({globalVars.ollamaModel})
                     </span>
                     <Wand2 className="w-4 h-4 text-blue-400" />
                   </div>
                   <h3 className="text-lg font-semibold text-blue-200 mb-2">Custom Requirement</h3>
-                  <p className="text-sm text-slate-400 flex-1">Generate bespoke scripts using Generative AI.</p>
+                  <p className="text-sm text-slate-400 flex-1">Generate bespoke scripts using Local Ollama.</p>
               </button>
             </div>
           </div>
@@ -223,7 +229,7 @@ const Generator: React.FC<GeneratorProps> = ({ selectedCategory, azureContext, g
                                 className="flex items-center gap-2 px-6 py-3 rounded-lg font-semibold text-white bg-blue-600 hover:bg-blue-500 transition-all disabled:opacity-50"
                             >
                                 {loading ? <Loader2 className="animate-spin w-4 h-4" /> : <Wand2 className="w-4 h-4" />}
-                                Generate
+                                Generate with Ollama
                             </button>
                         </div>
                      </div>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import Generator from './components/Generator';
 import Troubleshooter from './components/Troubleshooter';
@@ -14,14 +14,32 @@ const App: React.FC = () => {
       isConnected: false
   });
   
-  const [globalVars, setGlobalVars] = useState<GlobalVariables>({
-      projectPrefix: 'demo',
-      environment: 'dev',
-      location: 'eastus',
-      costCenter: 'IT-General',
-      owner: 'cloud-admin',
-      proximityPlacementGroup: ''
+  // Load initial state from localStorage or fallback to defaults
+  const [globalVars, setGlobalVars] = useState<GlobalVariables>(() => {
+      try {
+          const saved = localStorage.getItem('azureMate_globalVars');
+          if (saved) {
+              return JSON.parse(saved);
+          }
+      } catch (e) {
+          console.warn("Failed to load variables from local storage", e);
+      }
+      
+      return {
+          projectPrefix: 'demo',
+          environment: 'dev',
+          location: 'eastus',
+          costCenter: 'IT-General',
+          owner: 'cloud-admin',
+          proximityPlacementGroup: '',
+          ollamaModel: 'llama3'
+      };
   });
+
+  // Auto-save globalVars to localStorage whenever they change
+  useEffect(() => {
+      localStorage.setItem('azureMate_globalVars', JSON.stringify(globalVars));
+  }, [globalVars]);
 
   return (
     <div className="flex h-screen bg-slate-950 text-slate-200 font-sans">
@@ -35,7 +53,7 @@ const App: React.FC = () => {
       />
       
       <main className="flex-1 overflow-hidden relative">
-        {currentView === ViewState.TROUBLESHOOTER && <Troubleshooter />}
+        {currentView === ViewState.TROUBLESHOOTER && <Troubleshooter globalVars={globalVars} />}
         {currentView === ViewState.VARIABLES && (
             <VariablesPage config={globalVars} onSave={setGlobalVars} />
         )}
