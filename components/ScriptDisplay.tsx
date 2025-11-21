@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
-import { Copy, Check, Terminal, BookOpen, Share2, Layout, Plus, Play, ExternalLink, ArrowRight, X, AlertTriangle } from 'lucide-react';
-import { GeneratedResult, LearnLink, DeploymentStatus, AzureContext } from '../types';
+import { Copy, Check, Terminal, BookOpen, Share2, Layout, Plus, Play, ExternalLink, ArrowRight, X, AlertTriangle, CheckCircle2, ShoppingCart, Box } from 'lucide-react';
+import { GeneratedResult, LearnLink, DeploymentStatus, AzureContext, ViewState } from '../types';
 import Mermaid from './Mermaid';
 import TerminalOutput from './TerminalOutput';
 import { runMockDeployment } from '../services/mockDeployment';
@@ -13,12 +13,24 @@ interface ScriptDisplayProps {
   onAddToCart?: () => void;
   projectName?: string;
   azureContext?: AzureContext;
+  onNavigate?: (view: ViewState) => void;
+  onReturnToCatalog?: () => void;
 }
 
-const ScriptDisplay: React.FC<ScriptDisplayProps> = ({ result, diagramCode, learnLinks, onAddToCart, projectName, azureContext }) => {
+const ScriptDisplay: React.FC<ScriptDisplayProps> = ({ 
+    result, 
+    diagramCode, 
+    learnLinks, 
+    onAddToCart, 
+    projectName, 
+    azureContext,
+    onNavigate,
+    onReturnToCatalog
+}) => {
   const [copied, setCopied] = useState(false);
   const [addedToCart, setAddedToCart] = useState(false);
   const [activeTab, setActiveTab] = useState<'script' | 'diagram' | 'resources'>('script');
+  const [showNextSteps, setShowNextSteps] = useState(false);
   
   // Deployment State
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -42,6 +54,8 @@ const ScriptDisplay: React.FC<ScriptDisplayProps> = ({ result, diagramCode, lear
       if (onAddToCart) {
           onAddToCart();
           setAddedToCart(true);
+          setShowNextSteps(true);
+          // We keep the "Added" state for visual feedback but also show the persistent next steps
           setTimeout(() => setAddedToCart(false), 3000);
       }
   };
@@ -157,6 +171,42 @@ const ScriptDisplay: React.FC<ScriptDisplayProps> = ({ result, diagramCode, lear
                        </button>
                    </div>
                )}
+          </div>
+      )}
+
+      {/* Post-Add Workflow Navigation */}
+      {showNextSteps && (
+          <div className="bg-emerald-950/20 border border-emerald-900/50 rounded-xl p-4 flex flex-col md:flex-row items-center justify-between gap-4 animate-in fade-in slide-in-from-top-2">
+              <div className="flex items-center gap-3">
+                  <div className="p-2 bg-emerald-900/30 rounded-full">
+                      <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                  </div>
+                  <div>
+                      <h4 className="text-sm font-bold text-emerald-100">Added to End-State Plan</h4>
+                      <p className="text-xs text-emerald-400/70">This configuration is staged for deployment.</p>
+                  </div>
+              </div>
+              
+              <div className="flex items-center gap-3">
+                  {onReturnToCatalog && (
+                      <button 
+                          onClick={onReturnToCatalog}
+                          className="flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-xs font-bold text-slate-300 transition-colors"
+                      >
+                          <Plus className="w-3 h-3" />
+                          Configure Another Resource
+                      </button>
+                  )}
+                  {onNavigate && (
+                      <button 
+                          onClick={() => onNavigate(ViewState.END_STATE)}
+                          className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg shadow-lg shadow-emerald-900/20 transition-colors group"
+                      >
+                          Review Plan & Deploy
+                          <ArrowRight className="w-3 h-3 group-hover:translate-x-1 transition-transform" />
+                      </button>
+                  )}
+              </div>
           </div>
       )}
 

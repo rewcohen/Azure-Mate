@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { AzureCategory, ViewState, AzureContext, ServiceHealth } from '../types';
 import { fetchAzureStatus, sortServiceHealth } from '../services/azureStatusService';
 import ConnectWizard from './ConnectWizard';
+import HelpModal from './HelpModal';
 import { 
   Server, 
   Network, 
@@ -24,7 +25,8 @@ import {
   Loader2,
   ShieldCheck,
   Trash2,
-  Home
+  Home,
+  HelpCircle
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -57,6 +59,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   onStartOver
 }) => {
   const [showWizard, setShowWizard] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   
   // System Status State
   const [serviceStatuses, setServiceStatuses] = useState<ServiceHealth[]>([]);
@@ -137,6 +140,10 @@ const Sidebar: React.FC<SidebarProps> = ({
               onConnect={onUpdateContext}
               onAutoPopulate={onAutoPopulate}
           />
+      )}
+
+      {showHelp && (
+          <HelpModal onClose={() => setShowHelp(false)} />
       )}
 
       <div className="p-6 border-b border-slate-800">
@@ -247,6 +254,14 @@ const Sidebar: React.FC<SidebarProps> = ({
           >
             <Settings className="w-4 h-4" />
             Global Config
+          </button>
+
+          <button 
+            onClick={() => setShowHelp(true)}
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm mt-1 transition-colors text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+          >
+            <HelpCircle className="w-4 h-4" />
+            Help & Guide
           </button>
         </div>
 

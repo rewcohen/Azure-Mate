@@ -1,14 +1,16 @@
+
 import React, { useState, useEffect, useRef } from 'react';
-import { GlobalVariables } from '../types';
+import { GlobalVariables, ViewState } from '../types';
 import { updateLivePricing } from '../services/pricingService';
-import { Save, Settings, Tag, Globe, MapPin, Briefcase, User, Layers, HelpCircle, Cpu, Loader2, Check, DollarSign, RefreshCw, AlertTriangle } from 'lucide-react';
+import { Save, Settings, Tag, Globe, MapPin, Briefcase, User, Layers, HelpCircle, Cpu, Loader2, Check, DollarSign, RefreshCw, AlertTriangle, ArrowRight } from 'lucide-react';
 
 interface VariablesPageProps {
   config: GlobalVariables;
   onSave: (newConfig: GlobalVariables) => void;
+  onNavigate?: (view: ViewState) => void;
 }
 
-const VariablesPage: React.FC<VariablesPageProps> = ({ config, onSave }) => {
+const VariablesPage: React.FC<VariablesPageProps> = ({ config, onSave, onNavigate }) => {
   const [formData, setFormData] = useState<GlobalVariables>(config);
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   
@@ -89,7 +91,7 @@ const VariablesPage: React.FC<VariablesPageProps> = ({ config, onSave }) => {
         </div>
       </div>
 
-      <div className="p-8 max-w-4xl mx-auto w-full space-y-6">
+      <div className="p-8 max-w-4xl mx-auto w-full space-y-6 pb-24">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             
             {/* Naming Convention Section */}
@@ -299,6 +301,19 @@ const VariablesPage: React.FC<VariablesPageProps> = ({ config, onSave }) => {
                 </div>
             </div>
         </div>
+
+        {/* Workflow Footer Navigation */}
+        {onNavigate && (
+            <div className="mt-8 pt-6 border-t border-slate-800 flex justify-end">
+                <button 
+                    onClick={() => onNavigate(ViewState.CATALOG)}
+                    className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg shadow-lg shadow-blue-900/20 transition-all group"
+                >
+                    Next: Configuration Library
+                    <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                </button>
+            </div>
+        )}
       </div>
     </div>
   );

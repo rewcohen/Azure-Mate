@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Scenario, GeneratedResult, AzureCategory, AzureContext, GlobalVariables, CostBreakdown, SavedDeploymentItem } from '../types';
+import { Scenario, GeneratedResult, AzureCategory, AzureContext, GlobalVariables, CostBreakdown, SavedDeploymentItem, ViewState } from '../types';
 import { SCENARIOS } from '../constants';
 import { generateConfig } from '../services/geminiService';
 import { generateScriptFromTemplate, processDiagramTemplate } from '../services/templateEngine';
@@ -16,6 +16,7 @@ interface GeneratorProps {
   onScenarioChange: (scenario: Scenario | null) => void;
   onAddToCart: (item: SavedDeploymentItem) => void;
   projectName?: string;
+  onNavigate: (view: ViewState) => void;
 }
 
 const Generator: React.FC<GeneratorProps> = ({ 
@@ -25,7 +26,8 @@ const Generator: React.FC<GeneratorProps> = ({
   activeScenario,
   onScenarioChange,
   onAddToCart,
-  projectName
+  projectName,
+  onNavigate
 }) => {
   // Local state for wizard form
   const [inputValues, setInputValues] = useState<Record<string, string | number | boolean>>({});
@@ -285,6 +287,8 @@ const Generator: React.FC<GeneratorProps> = ({
                             onAddToCart={handleSaveToCart}
                             projectName={projectName}
                             azureContext={azureContext}
+                            onNavigate={onNavigate}
+                            onReturnToCatalog={() => { onScenarioChange(null); setResult(null); }}
                         />
                     )
                  )
@@ -559,6 +563,8 @@ const Generator: React.FC<GeneratorProps> = ({
                             onAddToCart={handleSaveToCart}
                             projectName={projectName}
                             azureContext={azureContext}
+                            onNavigate={onNavigate}
+                            onReturnToCatalog={() => { onScenarioChange(null); setResult(null); }}
                         />
                      ) : (
                         <div className="flex items-center justify-center h-64 text-slate-500">

@@ -157,7 +157,11 @@ const App: React.FC = () => {
         {currentView === ViewState.HOME && <Home onNavigate={setCurrentView} />}
         {currentView === ViewState.TROUBLESHOOTER && <Troubleshooter globalVars={globalVars} azureContext={azureContext} />}
         {currentView === ViewState.VARIABLES && (
-            <VariablesPage config={globalVars} onSave={setGlobalVars} />
+            <VariablesPage 
+                config={globalVars} 
+                onSave={setGlobalVars} 
+                onNavigate={setCurrentView}
+            />
         )}
         {currentView === ViewState.END_STATE && (
             <EndStateDeployment project={projectState} onRemoveItem={handleRemoveFromCart} />
@@ -171,6 +175,7 @@ const App: React.FC = () => {
             onScenarioChange={setActiveScenario}
             onAddToCart={handleAddToCart}
             projectName={projectState.name}
+            onNavigate={setCurrentView}
           />
         )}
       </main>
