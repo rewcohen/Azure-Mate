@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Copy, Check, Terminal, BookOpen, Share2, Layout, Plus, Play, ExternalLink, ArrowRight, X } from 'lucide-react';
+import { Copy, Check, Terminal, BookOpen, Share2, Layout, Plus, Play, ExternalLink, ArrowRight, X, AlertTriangle } from 'lucide-react';
 import { GeneratedResult, LearnLink, DeploymentStatus, AzureContext } from '../types';
 import Mermaid from './Mermaid';
 import TerminalOutput from './TerminalOutput';
@@ -21,6 +21,7 @@ const ScriptDisplay: React.FC<ScriptDisplayProps> = ({ result, diagramCode, lear
   const [activeTab, setActiveTab] = useState<'script' | 'diagram' | 'resources'>('script');
   
   // Deployment State
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [showDeployModal, setShowDeployModal] = useState(false);
   const [deployment, setDeployment] = useState<DeploymentStatus>({
       state: 'idle',
@@ -50,7 +51,11 @@ const ScriptDisplay: React.FC<ScriptDisplayProps> = ({ result, diagramCode, lear
           alert("Please connect to your Azure Tenant using the sidebar wizard before running live deployments.");
           return;
       }
-      
+      setShowConfirmModal(true);
+  };
+
+  const executeDeployment = () => {
+      setShowConfirmModal(false);
       setShowDeployModal(true);
       setDeployment({ state: 'running', progress: 0, logs: [] });
 
@@ -69,6 +74,50 @@ const ScriptDisplay: React.FC<ScriptDisplayProps> = ({ result, diagramCode, lear
   return (
     <div className="flex flex-col h-full gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500 relative">
       
+      {/* Confirmation Modal */}
+      {showConfirmModal && (
+          <div className="absolute inset-0 z-[60] bg-slate-950/90 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200 rounded-lg">
+               <div className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl max-w-md w-full p-6 border-l-4 border-l-amber-500">
+                   <div className="flex items-start gap-4 mb-4">
+                       <div className="p-3 bg-amber-500/10 rounded-full">
+                           <AlertTriangle className="w-6 h-6 text-amber-500" />
+                       </div>
+                       <div>
+                           <h3 className="text-lg font-bold text-white">Confirm Deployment</h3>
+                           <p className="text-sm text-slate-400 mt-1">
+                               You are about to execute a deployment script against a live environment.
+                           </p>
+                       </div>
+                   </div>
+                   
+                   <div className="bg-slate-950 rounded-lg border border-slate-800 p-3 mb-6">
+                       <div className="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-1">Target Subscription</div>
+                       <div className="text-sm font-mono text-white break-all">{azureContext?.subscriptionId}</div>
+                   </div>
+
+                   <p className="text-xs text-slate-500 mb-6">
+                       This process simulates resource creation. Verify your subscription context before proceeding to avoid unintended changes.
+                   </p>
+
+                   <div className="flex justify-end gap-3">
+                       <button 
+                           onClick={() => setShowConfirmModal(false)}
+                           className="px-4 py-2 text-sm text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+                       >
+                           Cancel
+                       </button>
+                       <button 
+                           onClick={executeDeployment}
+                           className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold rounded-lg shadow-lg shadow-blue-900/20 flex items-center gap-2"
+                       >
+                           <Play className="w-3 h-3 fill-current" />
+                           Yes, Deploy
+                       </button>
+                   </div>
+               </div>
+          </div>
+      )}
+
       {/* Deployment Modal Overlay */}
       {showDeployModal && (
           <div className="absolute inset-0 z-50 bg-slate-950/90 backdrop-blur-sm flex flex-col p-4 animate-in fade-in duration-200 rounded-lg">

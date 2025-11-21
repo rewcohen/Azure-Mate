@@ -23,7 +23,8 @@ import {
   XCircle,
   Loader2,
   ShieldCheck,
-  Trash2
+  Trash2,
+  Home
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -197,9 +198,18 @@ const Sidebar: React.FC<SidebarProps> = ({
         <div className="px-4 mb-2">
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Tools</p>
           <button 
+            onClick={() => handleNavClick(() => onSelectView(ViewState.HOME))}
+            onDoubleClick={() => handleNavDoubleClick(() => onSelectView(ViewState.HOME))}
+            className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors ${currentView === ViewState.HOME ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
+          >
+            <Home className="w-4 h-4" />
+            Home
+          </button>
+          
+          <button 
             onClick={() => handleNavClick(() => onSelectView(ViewState.CATALOG))}
             onDoubleClick={() => handleNavDoubleClick(() => onSelectView(ViewState.CATALOG))}
-            className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors ${currentView === ViewState.CATALOG ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
+            className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm mt-1 transition-colors ${currentView === ViewState.CATALOG ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
           >
             <Box className="w-4 h-4" />
             Config Library

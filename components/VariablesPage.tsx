@@ -19,6 +19,11 @@ const VariablesPage: React.FC<VariablesPageProps> = ({ config, onSave }) => {
   // Ref to hold the timeout ID so we can clear it
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Sync local state when props change (e.g., on "Start Over")
+  useEffect(() => {
+      setFormData(config);
+  }, [config]);
+
   // Cleanup timeout on unmount
   useEffect(() => {
     return () => {

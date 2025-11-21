@@ -61,6 +61,7 @@ export interface GeneratedResult {
 }
 
 export enum ViewState {
+  HOME = 'HOME',
   CATALOG = 'CATALOG',
   GENERATOR = 'GENERATOR',
   TROUBLESHOOTER = 'TROUBLESHOOTER',
