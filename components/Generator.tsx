@@ -1,21 +1,33 @@
 
 import React, { useState, useEffect } from 'react';
-import { Scenario, GeneratedResult, AzureCategory, AzureContext, GlobalVariables, CostBreakdown } from '../types';
+import { Scenario, GeneratedResult, AzureCategory, AzureContext, GlobalVariables, CostBreakdown, SavedDeploymentItem } from '../types';
 import { SCENARIOS } from '../constants';
 import { generateConfig } from '../services/geminiService';
 import { generateScriptFromTemplate, processDiagramTemplate } from '../services/templateEngine';
 import { calculateScenarioCost } from '../services/pricingService';
 import ScriptDisplay from './ScriptDisplay';
-import { ArrowRight, Wand2, Loader2, Search, Settings, FileCode, ArrowLeft, CheckCircle2, XCircle, Info, ExternalLink, Box, AlertTriangle, DollarSign } from 'lucide-react';
+import { ArrowRight, Wand2, Loader2, Search, Settings, FileCode, ArrowLeft, CheckCircle2, XCircle, Info, ExternalLink, Box, AlertTriangle, DollarSign, PieChart } from 'lucide-react';
 
 interface GeneratorProps {
   selectedCategory: AzureCategory | null;
   azureContext: AzureContext;
   globalVars: GlobalVariables;
+  activeScenario: Scenario | null;
+  onScenarioChange: (scenario: Scenario | null) => void;
+  onAddToCart: (item: SavedDeploymentItem) => void;
+  projectName?: string;
 }
 
-const Generator: React.FC<GeneratorProps> = ({ selectedCategory, azureContext, globalVars }) => {
-  const [activeScenario, setActiveScenario] = useState<Scenario | null>(null);
+const Generator: React.FC<GeneratorProps> = ({ 
+  selectedCategory, 
+  azureContext, 
+  globalVars,
+  activeScenario,
+  onScenarioChange,
+  onAddToCart,
+  projectName
+}) => {
+  // Local state for wizard form
   const [inputValues, setInputValues] = useState<Record<string, string | number | boolean>>({});
   
   const [customPrompt, setCustomPrompt] = useState('');
@@ -111,6 +123,38 @@ const Generator: React.FC<GeneratorProps> = ({ selectedCategory, azureContext, g
   const handleInputChange = (id: string, value: string | boolean | number) => {
       setInputValues(prev => ({ ...prev, [id]: value }));
   };
+  
+  // Helper for safe ID generation
+  const generateUniqueId = () => {
+      if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+          return crypto.randomUUID();
+      }
+      // Fallback for non-secure contexts or older browsers
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = Math.random() * 16 | 0;
+        const v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+      });
+  };
+
+  const handleSaveToCart = () => {
+      if (activeScenario && result) {
+          const diagram = processDiagramTemplate(activeScenario.diagramCode, activeScenario.inputs, inputValues, globalVars);
+          
+          const item: SavedDeploymentItem = {
+              id: generateUniqueId(),
+              timestamp: Date.now(),
+              scenarioId: activeScenario.id,
+              scenarioTitle: activeScenario.title,
+              script: result.script,
+              costEstimate: estimatedCost,
+              variables: result.variables,
+              deploymentTips: activeScenario.commonIssues || [],
+              diagramCode: diagram
+          };
+          onAddToCart(item);
+      }
+  };
 
   // Find prerequisite scenario objects
   const getPrerequisites = () => {
@@ -136,7 +180,7 @@ const Generator: React.FC<GeneratorProps> = ({ selectedCategory, azureContext, g
         </div>
         {activeScenario && (
           <button 
-            onClick={() => { setActiveScenario(null); setResult(null); }}
+            onClick={() => { onScenarioChange(null); setResult(null); }}
             className="flex items-center gap-2 text-sm text-slate-400 hover:text-white transition-colors"
           >
             <ArrowLeft className="w-4 h-4" /> Back to Library
@@ -163,7 +207,7 @@ const Generator: React.FC<GeneratorProps> = ({ selectedCategory, azureContext, g
               {filteredScenarios.map((scenario) => (
                 <button
                   key={scenario.id}
-                  onClick={() => setActiveScenario(scenario)}
+                  onClick={() => onScenarioChange(scenario)}
                   className="group text-left bg-slate-900 border border-slate-800 hover:border-blue-500/50 p-5 rounded-xl transition-all duration-200 hover:shadow-lg hover:shadow-blue-900/10 flex flex-col h-full"
                 >
                   <div className="flex items-start justify-between mb-3">
@@ -179,7 +223,7 @@ const Generator: React.FC<GeneratorProps> = ({ selectedCategory, azureContext, g
               
               {/* Custom Scenario Card */}
               <button
-                  onClick={() => setActiveScenario({
+                  onClick={() => onScenarioChange({
                       id: 'custom',
                       category: AzureCategory.COMPUTE,
                       title: 'Custom AI Configuration',
@@ -234,7 +278,15 @@ const Generator: React.FC<GeneratorProps> = ({ selectedCategory, azureContext, g
                         </div>
                      </div>
                  ) : (
-                    <ScriptDisplay result={result} />
+                    // Only render ScriptDisplay if result is not null
+                    result && (
+                        <ScriptDisplay 
+                            result={result} 
+                            onAddToCart={handleSaveToCart}
+                            projectName={projectName}
+                            azureContext={azureContext}
+                        />
+                    )
                  )
              ) : (
                  // TEMPLATE WIZARD FLOW
@@ -251,6 +303,7 @@ const Generator: React.FC<GeneratorProps> = ({ selectedCategory, azureContext, g
                                 <div className="space-y-4">
                                     <div className="p-3 bg-blue-900/20 border border-blue-900/30 rounded-lg text-xs text-blue-300 mb-4">
                                         Using global settings: <span className="font-mono">{globalVars.projectPrefix}</span> / <span className="font-mono">{globalVars.environment}</span>
+                                        {projectName && <div className="mt-1 pt-1 border-t border-blue-800/50 text-emerald-400">Target Project: {projectName}</div>}
                                     </div>
 
                                     {activeScenario.inputs.map(input => (
@@ -312,58 +365,73 @@ const Generator: React.FC<GeneratorProps> = ({ selectedCategory, azureContext, g
                          <div className="lg:col-span-2 space-y-6">
                              
                              {/* Cost Estimation Card */}
-                             <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-lg">
-                                 <div className="flex items-center justify-between mb-4">
-                                     <h4 className="text-base font-bold text-white flex items-center gap-2">
-                                         <DollarSign className="w-5 h-5 text-emerald-400" />
-                                         Monthly Estimate
-                                     </h4>
-                                     <span className="text-xs font-mono text-slate-500">
-                                         Using Azure Retail Prices (East US)
-                                     </span>
+                             <div className="bg-slate-900 border border-slate-800 rounded-xl shadow-lg overflow-hidden">
+                                 <div className="p-6 border-b border-slate-800 bg-slate-800/30">
+                                     <div className="flex items-center justify-between">
+                                         <h4 className="text-base font-bold text-white flex items-center gap-2">
+                                             <PieChart className="w-5 h-5 text-emerald-400" />
+                                             Resource Cost Breakdown
+                                         </h4>
+                                         <span className="text-xs font-mono text-slate-500 bg-slate-950 px-2 py-1 rounded border border-slate-800">
+                                             Retail Prices (USD)
+                                         </span>
+                                     </div>
                                  </div>
                                  
-                                 {estimatedCost ? (
-                                     <div className="space-y-3">
-                                         <div className="flex items-end gap-2 mb-4">
-                                             <span className="text-3xl font-bold text-white">
-                                                 {formatCurrency(estimatedCost.totalMonthly)}
-                                             </span>
-                                             <span className="text-sm text-slate-500 mb-1">/ month</span>
-                                         </div>
-                                         
-                                         <div className="bg-slate-950 rounded-lg border border-slate-800 p-3 space-y-2">
-                                             <div className="grid grid-cols-12 text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">
-                                                 <div className="col-span-5">Resource</div>
-                                                 <div className="col-span-3 text-right">Unit Price</div>
-                                                 <div className="col-span-1 text-right">Qty</div>
-                                                 <div className="col-span-3 text-right">Total</div>
-                                             </div>
-                                             {estimatedCost.items.map((item, idx) => (
-                                                 <div key={idx} className="grid grid-cols-12 text-sm text-slate-300 items-center border-b border-slate-800 last:border-0 pb-2 last:pb-0">
-                                                     <div className="col-span-5 truncate pr-2">
-                                                         <div className="font-medium">{item.resourceName}</div>
-                                                         <div className="text-xs text-slate-500 truncate">{item.sku}</div>
-                                                     </div>
-                                                     <div className="col-span-3 text-right font-mono text-xs">
-                                                         {formatCurrency(item.unitPrice)}
-                                                     </div>
-                                                     <div className="col-span-1 text-right font-mono text-xs text-slate-500">
-                                                         x{item.quantity}
-                                                     </div>
-                                                     <div className="col-span-3 text-right font-mono text-emerald-400/90">
-                                                         {formatCurrency(item.total)}
-                                                     </div>
-                                                 </div>
-                                             ))}
-                                         </div>
-                                         <p className="text-[10px] text-slate-600 mt-2 italic">
-                                             *Estimates exclude bandwidth, storage transactions, and taxes. Actual pricing may vary by region and agreement.
-                                         </p>
-                                     </div>
-                                 ) : (
-                                     <p className="text-sm text-slate-500">Calculated based on selection...</p>
-                                 )}
+                                 <div className="p-6">
+                                    {estimatedCost ? (
+                                        <div className="space-y-6">
+                                            {/* Detailed Table */}
+                                            <div className="overflow-hidden rounded-lg border border-slate-800">
+                                                <table className="w-full text-sm text-left text-slate-400">
+                                                    <thead className="text-xs text-slate-500 uppercase bg-slate-950 border-b border-slate-800">
+                                                        <tr>
+                                                            <th className="px-4 py-3">Resource Item</th>
+                                                            <th className="px-4 py-3 text-right">Unit Cost</th>
+                                                            <th className="px-4 py-3 text-right">Qty</th>
+                                                            <th className="px-4 py-3 text-right">Subtotal</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="bg-[#0d1117]">
+                                                        {estimatedCost.items.map((item, idx) => (
+                                                            <tr key={idx} className="border-b border-slate-800 last:border-0 hover:bg-slate-800/20 transition-colors">
+                                                                <td className="px-4 py-3">
+                                                                    <div className="font-medium text-slate-200">{item.resourceName}</div>
+                                                                    <div className="text-[10px] text-slate-500 font-mono truncate max-w-[200px]">{item.sku}</div>
+                                                                </td>
+                                                                <td className="px-4 py-3 text-right font-mono">
+                                                                    {formatCurrency(item.unitPrice)}
+                                                                </td>
+                                                                <td className="px-4 py-3 text-right font-mono text-slate-500">
+                                                                    {item.quantity}
+                                                                </td>
+                                                                <td className="px-4 py-3 text-right font-mono text-slate-200">
+                                                                    {formatCurrency(item.total)}
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+
+                                            {/* Total Footer */}
+                                            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 bg-emerald-950/10 border border-emerald-900/30 rounded-lg">
+                                                <div className="text-xs text-slate-400 max-w-xs">
+                                                    <p className="italic">* Estimates exclude bandwidth, IOPS, and taxes. Actual pricing varies by region.</p>
+                                                </div>
+                                                <div className="text-right">
+                                                    <span className="block text-xs font-medium text-slate-500 uppercase mb-1">Estimated Monthly Total</span>
+                                                    <span className="text-3xl font-bold text-emerald-400">{formatCurrency(estimatedCost.totalMonthly)}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="text-center py-8 text-slate-500">
+                                            <DollarSign className="w-10 h-10 mx-auto mb-2 opacity-20" />
+                                            <p>Calculated based on resource selection...</p>
+                                        </div>
+                                    )}
+                                 </div>
                              </div>
 
                              {/* Description */}
@@ -419,7 +487,7 @@ const Generator: React.FC<GeneratorProps> = ({ selectedCategory, azureContext, g
                                             pre && (
                                                 <button
                                                     key={idx}
-                                                    onClick={() => setActiveScenario(pre)}
+                                                    onClick={() => onScenarioChange(pre)}
                                                     className="flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-xs text-slate-200 transition-colors group"
                                                 >
                                                     <Box className="w-3 h-3 text-blue-400" />
@@ -482,11 +550,22 @@ const Generator: React.FC<GeneratorProps> = ({ selectedCategory, azureContext, g
                          </div>
                      </div>
                  ) : (
-                     <ScriptDisplay 
-                        result={result!} 
-                        diagramCode={processDiagramTemplate(activeScenario.diagramCode, activeScenario.inputs, inputValues, globalVars)}
-                        learnLinks={activeScenario.learnLinks}
-                     />
+                     // Guard logic: Ensure result is not null before rendering ScriptDisplay
+                     result ? (
+                        <ScriptDisplay 
+                            result={result} 
+                            diagramCode={processDiagramTemplate(activeScenario.diagramCode, activeScenario.inputs, inputValues, globalVars)}
+                            learnLinks={activeScenario.learnLinks}
+                            onAddToCart={handleSaveToCart}
+                            projectName={projectName}
+                            azureContext={azureContext}
+                        />
+                     ) : (
+                        <div className="flex items-center justify-center h-64 text-slate-500">
+                            <Loader2 className="w-8 h-8 animate-spin text-blue-500 mb-2" />
+                            <span className="ml-2">Generating configuration...</span>
+                        </div>
+                     )
                  )
              )}
           </div>

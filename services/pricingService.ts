@@ -2,6 +2,11 @@
 
 
 
+
+
+
+
+
 import { CostBreakdown, CostItem } from "../types";
 
 /**
@@ -70,6 +75,10 @@ const PRICING_CATALOG: Record<string, number> = {
     'Static Web App (Standard)': 9.00,
     'Container Apps (vCPU)': 25.00, // Approx active monthly 
     'Container Apps (Memory)': 6.00,  // Approx active monthly
+
+    // ACI
+    'ACI (vCPU)': 30.00, // Est monthly per core active
+    'ACI (Memory)': 3.00, // Est monthly per GB active
 
     // Integration
     'Logic App (WS1)': 175.00, // Approx
@@ -239,6 +248,27 @@ export const calculateScenarioCost = (
             break;
         }
 
+        case 'aci-single': {
+            const cpu = Number(inputs['cpu'] || 1);
+            const mem = Number(inputs['memory'] || 1.5);
+            
+            items.push({
+                resourceName: 'ACI vCPU Duration',
+                sku: 'Standard',
+                unitPrice: PRICING_CATALOG['ACI (vCPU)'],
+                quantity: cpu,
+                total: PRICING_CATALOG['ACI (vCPU)'] * cpu
+            });
+             items.push({
+                resourceName: 'ACI Memory Duration',
+                sku: 'Standard',
+                unitPrice: PRICING_CATALOG['ACI (Memory)'],
+                quantity: mem,
+                total: PRICING_CATALOG['ACI (Memory)'] * mem
+            });
+            break;
+        }
+
         case 'bastion-vnet': {
             items.push({
                 resourceName: 'Azure Bastion',
@@ -386,6 +416,24 @@ export const calculateScenarioCost = (
                 unitPrice: PRICING_CATALOG['Public IP (Standard)'],
                 quantity: 1,
                 total: PRICING_CATALOG['Public IP (Standard)']
+            });
+            break;
+        }
+
+        case 'dns-public': {
+            items.push({
+                resourceName: 'DNS Zone',
+                sku: 'Public',
+                unitPrice: 0.50,
+                quantity: 1,
+                total: 0.50
+            });
+             items.push({
+                resourceName: 'DNS Queries (Est. 1M)',
+                sku: 'Standard',
+                unitPrice: 0.40,
+                quantity: 1,
+                total: 0.40
             });
             break;
         }
@@ -603,6 +651,24 @@ export const calculateScenarioCost = (
                 unitPrice: PRICING_CATALOG['Service Bus (Ops 1M)'],
                 quantity: 5,
                 total: PRICING_CATALOG['Service Bus (Ops 1M)'] * 5
+            });
+            break;
+        }
+
+        case 'monitor-cost-analytics': {
+            items.push({
+                resourceName: 'Log Analytics Workspace',
+                sku: 'Pay-as-you-go',
+                unitPrice: PRICING_CATALOG['Log Analytics (Per GB)'],
+                quantity: 5, // Est 5GB
+                total: PRICING_CATALOG['Log Analytics (Per GB)'] * 5
+            });
+            items.push({
+                resourceName: 'Automation Account',
+                sku: 'Basic',
+                unitPrice: 0.002, // Minimal cost per minute usually
+                quantity: 0, // Assuming within free grant
+                total: 0
             });
             break;
         }

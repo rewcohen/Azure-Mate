@@ -1,17 +1,35 @@
+
 import React, { useState } from 'react';
-import { Copy, Check, Terminal, BookOpen, Share2, Layout } from 'lucide-react';
-import { GeneratedResult, LearnLink } from '../types';
+import { Copy, Check, Terminal, BookOpen, Share2, Layout, Plus, Play, ExternalLink, ArrowRight, X } from 'lucide-react';
+import { GeneratedResult, LearnLink, DeploymentStatus, AzureContext } from '../types';
 import Mermaid from './Mermaid';
+import TerminalOutput from './TerminalOutput';
+import { runMockDeployment } from '../services/mockDeployment';
 
 interface ScriptDisplayProps {
   result: GeneratedResult;
   diagramCode?: string;
   learnLinks?: LearnLink[];
+  onAddToCart?: () => void;
+  projectName?: string;
+  azureContext?: AzureContext;
 }
 
-const ScriptDisplay: React.FC<ScriptDisplayProps> = ({ result, diagramCode, learnLinks }) => {
+const ScriptDisplay: React.FC<ScriptDisplayProps> = ({ result, diagramCode, learnLinks, onAddToCart, projectName, azureContext }) => {
   const [copied, setCopied] = useState(false);
+  const [addedToCart, setAddedToCart] = useState(false);
   const [activeTab, setActiveTab] = useState<'script' | 'diagram' | 'resources'>('script');
+  
+  // Deployment State
+  const [showDeployModal, setShowDeployModal] = useState(false);
+  const [deployment, setDeployment] = useState<DeploymentStatus>({
+      state: 'idle',
+      progress: 0,
+      logs: []
+  });
+
+  // Defensive check: If result is null, do not render to prevent crashes
+  if (!result) return null;
 
   const handleCopy = () => {
     navigator.clipboard.writeText(result.script);
@@ -19,33 +37,141 @@ const ScriptDisplay: React.FC<ScriptDisplayProps> = ({ result, diagramCode, lear
     setTimeout(() => setCopied(false), 2000);
   };
 
-  return (
-    <div className="flex flex-col h-full gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+  const handleAdd = () => {
+      if (onAddToCart) {
+          onAddToCart();
+          setAddedToCart(true);
+          setTimeout(() => setAddedToCart(false), 3000);
+      }
+  };
+
+  const handleRunDeployment = () => {
+      if (!azureContext?.isConnected) {
+          alert("Please connect to your Azure Tenant using the sidebar wizard before running live deployments.");
+          return;
+      }
       
-      {/* Tabs */}
-      <div className="flex gap-2 border-b border-slate-800">
-          <button 
-            onClick={() => setActiveTab('script')}
-            className={`px-4 py-2 text-sm font-medium flex items-center gap-2 border-b-2 transition-colors ${activeTab === 'script' ? 'border-blue-500 text-blue-400' : 'border-transparent text-slate-400 hover:text-slate-200'}`}
-          >
-              <Terminal className="w-4 h-4" /> PowerShell
-          </button>
-          {diagramCode && (
+      setShowDeployModal(true);
+      setDeployment({ state: 'running', progress: 0, logs: [] });
+
+      runMockDeployment(
+          result.script,
+          (log) => setDeployment(prev => ({ ...prev, logs: [...prev.logs, log] })),
+          (success) => setDeployment(prev => ({ ...prev, state: success ? 'completed' : 'failed' }))
+      );
+  };
+
+  const handleOpenCloudShell = () => {
+    handleCopy(); // Auto-copy script for convenience
+    window.open('https://shell.azure.com', '_blank');
+  };
+
+  return (
+    <div className="flex flex-col h-full gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500 relative">
+      
+      {/* Deployment Modal Overlay */}
+      {showDeployModal && (
+          <div className="absolute inset-0 z-50 bg-slate-950/90 backdrop-blur-sm flex flex-col p-4 animate-in fade-in duration-200 rounded-lg">
+               <div className="flex items-center justify-between mb-4">
+                   <div className="flex items-center gap-3">
+                       <div className={`p-2 rounded-lg ${deployment.state === 'running' ? 'bg-blue-500/20 text-blue-400 animate-pulse' : 'bg-emerald-500/20 text-emerald-400'}`}>
+                           <Terminal className="w-5 h-5" />
+                       </div>
+                       <div>
+                           <h3 className="text-lg font-bold text-white">Deploying Resources</h3>
+                           <p className="text-xs text-slate-400">Target Subscription: {azureContext?.subscriptionId}</p>
+                       </div>
+                   </div>
+                   <button 
+                    onClick={() => setShowDeployModal(false)}
+                    className="p-2 hover:bg-slate-800 rounded-full text-slate-400 hover:text-white"
+                   >
+                       <X className="w-5 h-5" />
+                   </button>
+               </div>
+
+               <div className="flex-1 overflow-hidden flex flex-col">
+                   <TerminalOutput 
+                        logs={deployment.logs} 
+                        isComplete={deployment.state === 'completed' || deployment.state === 'failed'} 
+                        className="flex-1"
+                   />
+               </div>
+
+               {deployment.state === 'completed' && (
+                   <div className="mt-4 flex justify-end gap-3 animate-in slide-in-from-bottom-2">
+                       <button onClick={() => setShowDeployModal(false)} className="px-4 py-2 text-slate-300 hover:text-white font-medium">
+                           Close
+                       </button>
+                       <button onClick={() => window.open(`https://portal.azure.com/#resource/subscriptions/${azureContext?.subscriptionId}/resourcegroups`)} className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium flex items-center gap-2">
+                           Verify in Portal <ExternalLink className="w-4 h-4" />
+                       </button>
+                   </div>
+               )}
+          </div>
+      )}
+
+      {/* Tabs & Actions */}
+      <div className="flex flex-wrap items-center justify-between border-b border-slate-800 gap-2 pb-1">
+          <div className="flex gap-2 overflow-x-auto no-scrollbar">
             <button 
-                onClick={() => setActiveTab('diagram')}
-                className={`px-4 py-2 text-sm font-medium flex items-center gap-2 border-b-2 transition-colors ${activeTab === 'diagram' ? 'border-blue-500 text-blue-400' : 'border-transparent text-slate-400 hover:text-slate-200'}`}
+                onClick={() => setActiveTab('script')}
+                className={`px-4 py-2 text-sm font-medium flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${activeTab === 'script' ? 'border-blue-500 text-blue-400' : 'border-transparent text-slate-400 hover:text-slate-200'}`}
             >
-                <Share2 className="w-4 h-4" /> Architecture Diagram
+                <Terminal className="w-4 h-4" /> PowerShell
             </button>
-          )}
-          {learnLinks && learnLinks.length > 0 && (
-             <button 
-                onClick={() => setActiveTab('resources')}
-                className={`px-4 py-2 text-sm font-medium flex items-center gap-2 border-b-2 transition-colors ${activeTab === 'resources' ? 'border-blue-500 text-blue-400' : 'border-transparent text-slate-400 hover:text-slate-200'}`}
-            >
-                <BookOpen className="w-4 h-4" /> Learn Resources
-            </button>
-          )}
+            {diagramCode && (
+                <button 
+                    onClick={() => setActiveTab('diagram')}
+                    className={`px-4 py-2 text-sm font-medium flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${activeTab === 'diagram' ? 'border-blue-500 text-blue-400' : 'border-transparent text-slate-400 hover:text-slate-200'}`}
+                >
+                    <Share2 className="w-4 h-4" /> Architecture
+                </button>
+            )}
+            {learnLinks && learnLinks.length > 0 && (
+                <button 
+                    onClick={() => setActiveTab('resources')}
+                    className={`px-4 py-2 text-sm font-medium flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${activeTab === 'resources' ? 'border-blue-500 text-blue-400' : 'border-transparent text-slate-400 hover:text-slate-200'}`}
+                >
+                    <BookOpen className="w-4 h-4" /> Resources
+                </button>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2 ml-auto">
+            {azureContext?.isConnected ? (
+                <button
+                    onClick={handleRunDeployment}
+                    className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold rounded bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-900/20 transition-all hover:scale-105 active:scale-95"
+                    title="Execute this script directly against your connected Azure subscription"
+                >
+                    <Play className="w-3 h-3 fill-current" /> Run Code Now
+                </button>
+            ) : (
+                <button
+                    onClick={handleOpenCloudShell}
+                    className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 transition-all"
+                    title="Open Azure Cloud Shell to run this script"
+                >
+                    <Terminal className="w-3 h-3" /> Open Cloud Shell
+                </button>
+            )}
+
+            {onAddToCart && (
+                <button
+                    onClick={handleAdd}
+                    disabled={addedToCart}
+                    className={`flex items-center gap-2 px-3 py-1.5 text-xs font-bold rounded transition-all ${
+                        addedToCart 
+                        ? 'bg-slate-800 text-emerald-400 border border-emerald-500/50' 
+                        : 'bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-900/20'
+                    }`}
+                >
+                    {addedToCart ? <Check className="w-3 h-3" /> : <Plus className="w-3 h-3" />}
+                    {addedToCart ? 'Added' : (projectName ? `Add to ${projectName}` : 'Add to Project')}
+                </button>
+            )}
+          </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 min-h-0">
@@ -58,13 +184,20 @@ const ScriptDisplay: React.FC<ScriptDisplayProps> = ({ result, diagramCode, lear
                         <Terminal className="w-4 h-4 text-blue-400" />
                         <span className="text-sm font-mono text-slate-200">deploy.ps1</span>
                     </div>
-                    <button 
-                        onClick={handleCopy}
-                        className="flex items-center gap-2 px-3 py-1 text-xs font-medium rounded bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors"
-                    >
-                        {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                        {copied ? 'Copied' : 'Copy'}
-                    </button>
+                    <div className="flex items-center gap-2">
+                        {!azureContext?.isConnected && (
+                            <span className="text-[10px] text-amber-500 flex items-center gap-1 mr-2">
+                                <ExternalLink className="w-3 h-3" /> Connect to run directly
+                            </span>
+                        )}
+                        <button 
+                            onClick={handleCopy}
+                            className="flex items-center gap-2 px-3 py-1 text-xs font-medium rounded bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors"
+                        >
+                            {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                            {copied ? 'Copied' : 'Copy'}
+                        </button>
+                    </div>
                     </div>
                     <div className="flex-1 overflow-auto p-4 bg-[#0d1117]">
                     <pre className="font-mono text-sm leading-relaxed text-slate-300 whitespace-pre-wrap">
@@ -111,7 +244,7 @@ const ScriptDisplay: React.FC<ScriptDisplayProps> = ({ result, diagramCode, lear
               <Layout className="w-4 h-4 text-emerald-500" /> Deployment Variables
             </h3>
             <div className="space-y-2">
-              {Object.entries(result.variables).length > 0 ? (
+              {result.variables && Object.entries(result.variables).length > 0 ? (
                 Object.entries(result.variables).map(([key, value]) => (
                   <div key={key} className="flex flex-col text-xs border-b border-slate-800 last:border-0 pb-2 last:pb-0">
                     <span className="text-slate-500">{key}</span>
@@ -123,6 +256,23 @@ const ScriptDisplay: React.FC<ScriptDisplayProps> = ({ result, diagramCode, lear
               )}
             </div>
           </div>
+          
+          {/* Quick Action Explanation */}
+          {activeTab === 'script' && (
+              <div className="bg-blue-950/20 rounded-lg border border-blue-900/30 p-4">
+                  <h4 className="text-xs font-bold text-blue-400 mb-2">Execution Options</h4>
+                  <ul className="space-y-2">
+                      <li className="flex items-start gap-2 text-xs text-slate-400">
+                          <Play className="w-3 h-3 text-emerald-400 mt-0.5" />
+                          <span><strong>Run Code Now:</strong> Simulates execution against your connected tenant immediately.</span>
+                      </li>
+                      <li className="flex items-start gap-2 text-xs text-slate-400">
+                          <Terminal className="w-3 h-3 text-slate-400 mt-0.5" />
+                          <span><strong>Cloud Shell:</strong> Opens Azure Portal terminal. Script is copied to clipboard for pasting.</span>
+                      </li>
+                  </ul>
+              </div>
+          )}
         </div>
       </div>
     </div>

@@ -1,4 +1,5 @@
 
+
 export enum AzureCategory {
   COMPUTE = 'Compute',
   NETWORKING = 'Networking',
@@ -63,7 +64,8 @@ export enum ViewState {
   CATALOG = 'CATALOG',
   GENERATOR = 'GENERATOR',
   TROUBLESHOOTER = 'TROUBLESHOOTER',
-  VARIABLES = 'VARIABLES'
+  VARIABLES = 'VARIABLES',
+  END_STATE = 'END_STATE'
 }
 
 export interface ChatMessage {
@@ -76,6 +78,8 @@ export interface AzureContext {
   subscriptionId: string;
   tenantId: string;
   isConnected: boolean;
+  userDisplayName?: string;
+  username?: string;
 }
 
 export interface GlobalVariables {
@@ -102,4 +106,75 @@ export interface CostBreakdown {
   totalMonthly: number;
   currency: string;
   isEstimated: boolean;
+}
+
+// Project Cart Types
+export interface SavedDeploymentItem {
+  id: string;
+  timestamp: number;
+  scenarioId: string;
+  scenarioTitle: string;
+  script: string;
+  costEstimate: CostBreakdown | null;
+  variables: Record<string, string | number | boolean>;
+  deploymentTips: string[];
+  diagramCode?: string;
+}
+
+export interface ProjectState {
+  name: string;
+  items: SavedDeploymentItem[];
+}
+
+// System Status Types
+export type ServiceStatusLevel = 'Available' | 'Warning' | 'Critical' | 'Information';
+
+export interface ServiceHealth {
+  name: string;
+  category: string; // e.g., Compute, Networking
+  region: string;   // e.g., Global, East US
+  status: ServiceStatusLevel;
+  updated: string;
+  message?: string;
+}
+
+// Auditor Types
+export interface ResourceNode {
+  id: string;
+  name: string;
+  type: string;
+  location: string;
+  tags?: Record<string, string>;
+  properties: Record<string, any>;
+  dependsOn?: string[]; 
+}
+
+export interface AuditIssue {
+  severity: 'critical' | 'warning' | 'info';
+  resourceId: string;
+  message: string;
+  code: string;
+  metadata?: {
+    targetId?: string;
+    expectedLocation?: string;
+    actualLocation?: string;
+  };
+}
+
+export interface AutoPopulate {
+  (location: string, env: string, owner: string): void;
+}
+
+// Deployment Types
+export interface DeploymentLog {
+  id: string;
+  timestamp: string;
+  message: string;
+  type: 'info' | 'success' | 'error' | 'warning' | 'command';
+}
+
+export interface DeploymentStatus {
+  state: 'idle' | 'running' | 'completed' | 'failed';
+  progress: number;
+  logs: DeploymentLog[];
 }

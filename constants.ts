@@ -1,10 +1,15 @@
 
-
 import { AzureCategory, Scenario } from './types';
 
 const COMMON_TAGS = '@{ "Environment" = "{{environment}}"; "Project" = "{{projectPrefix}}"; "CostCenter" = "{{costCenter}}"; "Owner" = "{{owner}}" }';
 const BASE_RG = '$RgName = "{{projectPrefix}}-{{environment}}-{{rgSuffix}}"';
 const BASE_LOC = '$Location = "{{location}}"';
+
+// Standard styling for diagrams
+const DIAGRAM_STYLES = `
+    classDef existing fill:#f1f5f9,stroke:#cbd5e1,color:#64748b,stroke-dasharray: 5 5;
+    classDef new fill:#dbeafe,stroke:#2563eb,color:#1e3a8a,stroke-width:2px;
+`;
 
 export const SCENARIOS: Scenario[] = [
   // --- COMPUTE (LINUX) ---
@@ -12,7 +17,7 @@ export const SCENARIOS: Scenario[] = [
     id: 'vm-linux-ssh',
     category: AzureCategory.COMPUTE,
     title: 'Secure Linux VM (Ubuntu)',
-    description: 'Deploys a hardened Ubuntu Linux Virtual Machine suitable for jumpboxes or web servers. This configuration includes a Network Security Group (NSG) strictly limiting ingress to SSH (Port 22), creates a User Assigned Managed Identity for secure Azure resource access without credentials, and utilizes SSH Key authentication for maximum security.',
+    description: 'Deploys a hardened Ubuntu Linux Virtual Machine suitable for jumpboxes or web servers. This configuration includes a Network Security Group (NSG) strictly limiting ingress to SSH (Port 22), creates a User Assigned Managed Identity for secure Azure resource access without credentials, and uses SSH Key authentication.',
     whatItDoes: [
         "Creates Resource Group and VNet/Subnet",
         "Deploys Ubuntu 22.04 LTS VM",
@@ -22,33 +27,32 @@ export const SCENARIOS: Scenario[] = [
     ],
     limitations: [
         "Does not configure OS-level diagnostics",
-        "Does not set up Azure Backup",
-        "Does not install custom extensions (Docker, etc.)"
+        "Does not set up Azure Backup"
     ],
     commonIssues: [
         "Connection Timeout: Often caused by corporate firewalls blocking outbound Port 22.",
-        "Permission Denied: Ensure the private key permissions are restricted (chmod 400) on the client side.",
-        "Identity Errors: The VM may take 1-2 minutes to fully register the Managed Identity after boot."
+        "Permission Denied: Ensure the private key permissions are restricted (chmod 400)."
     ],
     inputs: [
       { id: 'rgSuffix', label: 'RG Suffix', type: 'text', defaultValue: 'compute' },
       { id: 'vmName', label: 'VM Name', type: 'text', defaultValue: 'vm-app-01' },
-      { id: 'vmSize', label: 'VM Size', type: 'select', options: ['Standard_B1s', 'Standard_B2s', 'Standard_D2s_v3', 'Standard_D4s_v3', 'Standard_F2s_v2'], defaultValue: 'Standard_B2s', description: 'Affects cost. B-series is burstable, D-series is general purpose.' },
+      { id: 'vmSize', label: 'VM Size', type: 'select', options: ['Standard_B1s', 'Standard_B2s', 'Standard_D2s_v3', 'Standard_D4s_v3', 'Standard_F2s_v2'], defaultValue: 'Standard_B2s', description: 'Affects cost.' },
       { id: 'adminUser', label: 'Admin Username', type: 'text', defaultValue: 'azureuser' }
     ],
     learnLinks: [
       { title: 'Quickstart: Create a Linux VM', url: 'https://learn.microsoft.com/en-us/azure/virtual-machines/linux/quick-create-powershell' },
       { title: 'Proximity Placement Groups', url: 'https://learn.microsoft.com/en-us/azure/virtual-machines/co-location' }
     ],
-    diagramCode: `
-graph TD
-    User -->|SSH :22| NSG
-    subgraph "Azure: {{location}}"
+    diagramCode: `graph TD
+    User((User)) -->|SSH :22| NSG
+    subgraph "New Deployment: {{location}}"
       NSG[NSG] --> Subnet
       Subnet --> VM[Ubuntu VM]
       VM --> Disk[OS Disk]
     end
-    `,
+    ${DIAGRAM_STYLES}
+    class User existing;
+    class NSG,Subnet,VM,Disk new;`,
     scriptTemplate: `# Secure Linux VM Deployment
 $ErrorActionPreference = "Stop"
 ${BASE_RG}
@@ -103,7 +107,7 @@ Write-Host "Done." -ForegroundColor Green`
     id: 'vm-windows-secure',
     category: AzureCategory.COMPUTE,
     title: 'Secure Windows VM (2022)',
-    description: 'Deploys a Windows Server 2022 Datacenter Virtual Machine. It includes a specialized Network Security Group allowing RDP access (Port 3389) only from a specific management IP address to prevent brute-force attacks. It also enables the System Assigned Managed Identity.',
+    description: 'Deploys a Windows Server 2022 Datacenter Virtual Machine. It includes a specialized Network Security Group allowing RDP access (Port 3389) only from a specific management IP address to prevent brute-force attacks.',
     whatItDoes: [
         "Creates Windows Server 2022 VM",
         "Configures NSG with restricted RDP access",
@@ -114,8 +118,7 @@ Write-Host "Done." -ForegroundColor Green`
         "Does not install Anti-Malware extensions"
     ],
     commonIssues: [
-        "Public RDP Risk: Even with IP restriction, exposing RDP to the internet is risky. Use Azure Bastion for production.",
-        "Password Complexity: Windows passwords must meet strict complexity requirements (upper, lower, number, special)."
+        "Public RDP Risk: Exposing RDP is risky. Consider Azure Bastion for production."
     ],
     inputs: [
       { id: 'rgSuffix', label: 'RG Suffix', type: 'text', defaultValue: 'win' },
@@ -126,11 +129,14 @@ Write-Host "Done." -ForegroundColor Green`
     ],
     learnLinks: [{ title: 'Create Windows VM', url: 'https://learn.microsoft.com/en-us/azure/virtual-machines/windows/quick-create-powershell' }],
     diagramCode: `graph TD
-    User[Admin IP] -->|RDP :3389| NSG
-    subgraph Azure
-      NSG --> VM[Windows Server]
+    Admin((Admin IP)) -->|RDP :3389| NSG
+    subgraph "New Deployment: {{location}}"
+      NSG[NSG] --> VM[Windows Server]
       VM --> Disk[OS Disk]
-    end`,
+    end
+    ${DIAGRAM_STYLES}
+    class Admin existing;
+    class NSG,VM,Disk new;`,
     scriptTemplate: `# Windows Server 2022 Deployment
 $ErrorActionPreference = "Stop"
 ${BASE_RG}
@@ -192,8 +198,8 @@ Write-Host "Windows VM Deployed. Connect via RDP to $($pip.IpAddress)"`
         "No application deployed inside instances"
     ],
     commonIssues: [
-        "Over-provisioning: Autoscale can rapidly increase costs if thresholds are too sensitive.",
-        "Health Probes: The Load Balancer needs a valid health probe (e.g., HTTP on port 80) to route traffic."
+        "Over-provisioning: Autoscale can rapidly increase costs.",
+        "Health Probes: LB needs a valid probe to route traffic."
     ],
     inputs: [
       { id: 'rgSuffix', label: 'RG Suffix', type: 'text', defaultValue: 'scale' },
@@ -204,10 +210,15 @@ Write-Host "Windows VM Deployed. Connect via RDP to $($pip.IpAddress)"`
     ],
     learnLinks: [{ title: 'Create VMSS', url: 'https://learn.microsoft.com/en-us/azure/virtual-machine-scale-sets/quick-create-powershell' }],
     diagramCode: `graph TB
-    User --> LB[Load Balancer]
-    LB --> VM1[Instance 1]
-    LB --> VM2[Instance 2]
-    VM1 -.-> Scale[Autoscale Rule]`,
+    User((User)) --> LB[Load Balancer]
+    subgraph "New Deployment: {{location}}"
+      LB --> VM1[Instance 1]
+      LB --> VM2[Instance 2]
+      VM1 -.-> Scale[Autoscale Rule]
+    end
+    ${DIAGRAM_STYLES}
+    class User existing;
+    class LB,VM1,VM2,Scale new;`,
     scriptTemplate: `# VM Scale Set Deployment
 $ErrorActionPreference = "Stop"
 ${BASE_RG}
@@ -257,7 +268,7 @@ Write-Host "VMSS Deployed with Autoscale."`
     id: 'vm-spot-linux',
     category: AzureCategory.COMPUTE,
     title: 'Spot Virtual Machine (Cost Saver)',
-    description: 'Deploys an Azure Spot Virtual Machine. Spot VMs utilize unused Azure capacity at a significant discount (up to 90%). However, they can be evicted (shut down) by Azure at any time if the capacity is needed elsewhere. Ideal for batch jobs, dev/test, or stateless workloads.',
+    description: 'Deploys an Azure Spot Virtual Machine. Spot VMs utilize unused Azure capacity at a significant discount (up to 90%).',
     whatItDoes: [
         "Creates Spot VM (Eviction Policy: Deallocate)",
         "Sets Max Price to -1 (Current Market Price)"
@@ -267,8 +278,7 @@ Write-Host "VMSS Deployed with Autoscale."`
         "Can be evicted at any time"
     ],
     commonIssues: [
-        "Eviction: Your application must handle sudden shutdowns.",
-        "Capacity: Spot capacity varies by region and size. Deployment may fail if no spot capacity is available."
+        "Eviction: Your application must handle sudden shutdowns."
     ],
     inputs: [
       { id: 'rgSuffix', label: 'RG Suffix', type: 'text', defaultValue: 'spot' },
@@ -277,8 +287,14 @@ Write-Host "VMSS Deployed with Autoscale."`
     ],
     learnLinks: [{ title: 'Azure Spot VMs', url: 'https://learn.microsoft.com/en-us/azure/virtual-machines/spot-vms' }],
     diagramCode: `graph TD
-    User --> VM[Spot VM]
-    Azure[Azure Fabric] -.->|Eviction Signal| VM`,
+    Azure[Azure Fabric] -.->|Eviction Signal| VM
+    subgraph "New Deployment: {{location}}"
+      VM[Spot VM]
+      VM --> Disk[OS Disk]
+    end
+    ${DIAGRAM_STYLES}
+    class Azure existing;
+    class VM,Disk new;`,
     scriptTemplate: `# Spot VM Deployment
 $ErrorActionPreference = "Stop"
 ${BASE_RG}
@@ -308,30 +324,103 @@ New-AzVM -ResourceGroupName $RgName -Location $Location -VM $vmConfig -Tag $Tags
 
 Write-Host "Spot VM created."`
   },
+  
+  // --- COMPUTE (AVD) ---
+  {
+    id: 'avd-pooled',
+    category: AzureCategory.COMPUTE,
+    title: 'Azure Virtual Desktop (AVD)',
+    description: 'Deploys the core infrastructure for an Azure Virtual Desktop (AVD) environment. This includes a Workspace, a Pooled Host Pool, and a Desktop Application Group. AVD enables secure remote work by delivering virtualized desktops and apps.',
+    whatItDoes: [
+        "Creates AVD Workspace",
+        "Creates Pooled Host Pool",
+        "Creates Desktop Application Group",
+        "Registers App Group to Workspace",
+        "Generates Registration Token"
+    ],
+    limitations: [
+        "Does not deploy Session Host VMs",
+        "Does not configure Entra ID / Active Directory integration"
+    ],
+    commonIssues: [
+        "Registration Token: The output token is required to join VMs to this host pool. It expires after 24 hours.",
+        "Module: Requires 'Az.DesktopVirtualization' module."
+    ],
+    inputs: [
+      { id: 'rgSuffix', label: 'RG Suffix', type: 'text', defaultValue: 'avd' },
+      { id: 'hpName', label: 'Host Pool Name', type: 'text', defaultValue: 'hp-pooled-01' },
+      { id: 'wsName', label: 'Workspace Name', type: 'text', defaultValue: 'ws-avd-01' },
+      { id: 'lbType', label: 'Load Balancing', type: 'select', options: ['BreadthFirst', 'DepthFirst'], defaultValue: 'BreadthFirst', description: 'BreadthFirst spreads users; DepthFirst fills hosts.' }
+    ],
+    learnLinks: [{ title: 'Create AVD Host Pool', url: 'https://learn.microsoft.com/en-us/azure/virtual-desktop/create-host-pools-powershell' }],
+    diagramCode: `graph TB
+    User((User)) -->|RDP| Gateway[AVD Gateway]
+    Gateway --> WS[Workspace]
+    subgraph "New Deployment: {{location}}"
+      WS --> DAG[Desktop App Group]
+      DAG --> HP[Host Pool]
+      HP -.-> VM1[Future Session Host]
+      HP -.-> VM2[Future Session Host]
+    end
+    ${DIAGRAM_STYLES}
+    class User,Gateway,VM1,VM2 existing;
+    class WS,DAG,HP new;`,
+    scriptTemplate: `# Azure Virtual Desktop Infrastructure
+$ErrorActionPreference = "Stop"
+${BASE_RG}
+${BASE_LOC}
+$HpName = "{{hpName}}"
+$WsName = "{{wsName}}"
+$LbType = "{{lbType}}"
+$DagName = "$HpName-dag"
+$Tags = ${COMMON_TAGS}
+
+New-AzResourceGroup -Name $RgName -Location $Location -Tag $Tags -Force
+
+Write-Host "Creating Host Pool ($LbType)..."
+# Creating a Pooled Host Pool
+$hp = New-AzWvdHostPool -ResourceGroupName $RgName -Name $HpName -Location $Location ` +
+`-HostPoolType Pooled -LoadBalancerType $LbType -PreferredAppGroupType Desktop -Tag $Tags
+
+Write-Host "Creating Desktop Application Group..."
+$dag = New-AzWvdApplicationGroup -ResourceGroupName $RgName -Name $DagName -Location $Location ` +
+`-HostPoolArmPath $hp.Id -ApplicationGroupType Desktop -FriendlyName "Default Desktop" -Tag $Tags
+
+Write-Host "Creating Workspace..."
+$ws = New-AzWvdWorkspace -ResourceGroupName $RgName -Name $WsName -Location $Location -Tag $Tags
+
+Write-Host "Registering App Group to Workspace..."
+Register-AzWvdApplicationGroup -ResourceGroupName $RgName -WorkspaceName $WsName -ApplicationGroupPath $dag.Id
+
+Write-Host "Generating Host Registration Token (Valid 24h)..."
+$token = New-AzWvdRegistrationInfo -ResourceGroupName $RgName -HostPoolName $HpName -ExpirationTime ((Get-Date).ToUniversalTime().AddHours(24).ToString('yyyy-MM-ddTHH:mm:ss.fffffffZ'))
+
+Write-Host "AVD Environment Ready."
+Write-Host "Host Pool ID: $($hp.Id)"
+Write-Host "Registration Token: $($token.Token)" -ForegroundColor Yellow
+Write-Host "Use this token when deploying Session Host VMs."`
+  },
 
   // --- CONTAINERS (AKS) ---
   {
     id: 'aks-managed',
     category: AzureCategory.CONTAINERS,
     title: 'Azure Kubernetes Service (AKS)',
-    description: 'Provisions a production-ready Managed Kubernetes cluster. This setup uses System Assigned Managed Identity for control plane auth, Azure CNI for advanced networking (assigning VNet IPs to Pods), and enables the monitoring addon for Container Insights. It ensures the cluster is ready for high-performance workloads.',
+    description: 'Provisions a production-ready Managed Kubernetes cluster. This setup uses System Assigned Managed Identity for control plane auth and Azure CNI for advanced networking.',
     whatItDoes: [
         "Deploys AKS Cluster with Managed Identity",
         "Configures System Node Pool",
-        "Enables Azure CNI Networking",
-        "Generates SSH Keys for nodes"
+        "Enables Azure CNI Networking"
     ],
     limitations: [
-        "Does not configure Ingress Controller (AGIC/Nginx)",
-        "Does not enable Entra ID (AAD) integration",
-        "Does not set up Log Analytics workspace"
+        "Does not configure Ingress Controller",
+        "Does not enable Entra ID (AAD) integration"
     ],
     commonIssues: [
-        "Subnet Exhaustion: Azure CNI requires 1 IP per Pod. Ensure the subnet is large enough (min /24 recommended).",
-        "Quota Limits: Standard_DS2_v2 CPUs often hit regional subscription limits.",
-        "Registration State: 'Microsoft.ContainerService' provider must be registered in the subscription."
+        "Subnet Exhaustion: Azure CNI requires 1 IP per Pod.",
+        "Quota Limits: Check CPU quotas."
     ],
-    prerequisites: ['acr-premium'], // AKS often needs ACR
+    prerequisites: ['acr-premium'],
     inputs: [
       { id: 'rgSuffix', label: 'RG Suffix', type: 'text', defaultValue: 'k8s' },
       { id: 'clusterName', label: 'Cluster Name', type: 'text', defaultValue: 'aks-cluster-01' },
@@ -339,17 +428,21 @@ Write-Host "Spot VM created."`
       { id: 'vmSize', label: 'Node Size', type: 'select', options: ['Standard_DS2_v2', 'Standard_D4s_v3', 'Standard_F2s_v2'], defaultValue: 'Standard_DS2_v2' }
     ],
     learnLinks: [
-        { title: 'Quickstart: Deploy an AKS cluster', url: 'https://learn.microsoft.com/en-us/azure/aks/learn/quick-kubernetes-deploy-powershell' },
-        { title: 'AKS Best Practices', url: 'https://learn.microsoft.com/en-us/azure/aks/best-practices' }
+        { title: 'Quickstart: Deploy an AKS cluster', url: 'https://learn.microsoft.com/en-us/azure/aks/learn/quick-kubernetes-deploy-powershell' }
     ],
     diagramCode: `graph TB
-    User -->|kubectl| LB[Load Balancer]
-    subgraph "AKS Cluster: {{clusterName}}"
-      LB --> Node1
-      LB --> Node2
-      Node1[Node Pool]
-      Node2[System Pool]
-    end`,
+    User((User)) -->|kubectl| LB[Load Balancer]
+    subgraph "New Deployment: {{location}}"
+      subgraph "AKS Cluster: {{clusterName}}"
+        LB --> Node1
+        LB --> Node2
+        Node1[Node Pool]
+        Node2[System Pool]
+      end
+    end
+    ${DIAGRAM_STYLES}
+    class User existing;
+    class LB,Node1,Node2 new;`,
     scriptTemplate: `# AKS Deployment
 ${BASE_RG}
 ${BASE_LOC}
@@ -361,7 +454,7 @@ $ProximityGroup = "{{proximityPlacementGroup}}"
 
 New-AzResourceGroup -Name $RgName -Location $Location -Tag $Tags -Force
 
-# PPG Handling (AKS supports PPG for node pools)
+# PPG Handling
 $ppgId = $null
 if (-not [string]::IsNullOrWhiteSpace($ProximityGroup)) {
      $ppg = Get-AzProximityPlacementGroup -Name $ProximityGroup -ResourceGroupName $RgName -ErrorAction SilentlyContinue
@@ -369,9 +462,6 @@ if (-not [string]::IsNullOrWhiteSpace($ProximityGroup)) {
 }
 
 Write-Host "Creating AKS Cluster..."
-# Note: Basic deployment. For PPG, typically requires AgentPool config separately, but included here as parameter if applicable in specific API versions or add-on logic.
-# Defaulting to standard deployment for simplicity as direct New-AzAksCluster PPG support varies by module version.
-
 New-AzAksCluster -ResourceGroupName $RgName -Name $ClusterName -Location $Location ` + 
 `-NodeCount $NodeCount -NodeVmSize $NodeSize -NetworkPlugin azure ` +
 `-EnableManagedIdentity -GenerateSshKey -Tag $Tags
@@ -384,36 +474,104 @@ Write-Host "Get Credentials:"
 Write-Host "Get-AzAksClusterUserCredential -ResourceGroupName $RgName -Name $ClusterName"`
   },
 
+  // --- CONTAINERS (ACI Single) ---
+  {
+    id: 'aci-single',
+    category: AzureCategory.CONTAINERS,
+    title: 'Single Docker Container (ACI)',
+    description: 'Deploys a single container instance using Azure Container Instances (ACI). This is a "Serverless Container" solution ideal for simple applications, task automation, or build jobs that do not require full Kubernetes orchestration.',
+    whatItDoes: [
+        "Creates Resource Group",
+        "Deploys Container Group with 1 Container",
+        "Exposes Port 80 via Public IP",
+        "Configures DNS Name Label"
+    ],
+    limitations: [
+        "No Auto-scaling or Orchestration (unlike AKS)",
+        "No integrated Load Balancer support",
+        "No VNet Integration configured in this template"
+    ],
+    commonIssues: [
+        "Image Name: Ensure the image name is correct (e.g., 'nginx:latest').",
+        "DNS Name: Must be globally unique within the Azure region.",
+        "Ports: Only Port 80 is exposed by default in this script."
+    ],
+    inputs: [
+      { id: 'rgSuffix', label: 'RG Suffix', type: 'text', defaultValue: 'aci' },
+      { id: 'cgName', label: 'Container Name', type: 'text', defaultValue: 'aci-demo-01' },
+      { id: 'image', label: 'Image Name', type: 'text', defaultValue: 'mcr.microsoft.com/azuredocs/aci-helloworld', placeholder: 'nginx:latest' },
+      { id: 'osType', label: 'OS Type', type: 'select', options: ['Linux', 'Windows'], defaultValue: 'Linux' },
+      { id: 'cpu', label: 'CPU Cores', type: 'number', defaultValue: 1 },
+      { id: 'memory', label: 'Memory (GB)', type: 'number', defaultValue: 1.5 },
+      { id: 'dnsLabel', label: 'DNS Label', type: 'text', defaultValue: 'myapp-demo', description: 'Must be globally unique' }
+    ],
+    learnLinks: [
+        { title: 'Quickstart: Deploy ACI', url: 'https://learn.microsoft.com/en-us/azure/container-instances/container-instances-quickstart-powershell' }
+    ],
+    diagramCode: `graph LR
+    User((User)) -->|HTTP:80| ACI[Container Instance]
+    subgraph "New Deployment: {{location}}"
+      ACI
+      ACI -.->|Pull| DockerHub[Registry]
+    end
+    ${DIAGRAM_STYLES}
+    class User,DockerHub existing;
+    class ACI new;`,
+    scriptTemplate: `# Azure Container Instance (Single)
+$ErrorActionPreference = "Stop"
+${BASE_RG}
+${BASE_LOC}
+$CgName = "{{cgName}}"
+$Image = "{{image}}"
+$OsType = "{{osType}}"
+$Cpu = {{cpu}}
+$Memory = {{memory}}
+$DnsLabel = "{{dnsLabel}}"
+$Tags = ${COMMON_TAGS}
+
+New-AzResourceGroup -Name $RgName -Location $Location -Tag $Tags -Force
+
+Write-Host "Deploying Container Group ($Image)..."
+$container = New-AzContainerGroup -ResourceGroupName $RgName -Name $CgName -Location $Location ` +
+`-Image $Image -OsType $OsType -IpAddressType Public -Port 80 -DnsNameLabel $DnsLabel ` +
+`-Cpu $Cpu -MemoryInGB $Memory -Tag $Tags
+
+Write-Host "Deployment Complete."
+Write-Host "FQDN: http://$($container.IpAddress.Fqdn)" -ForegroundColor Cyan`
+  },
+
   // --- SERVERLESS (FUNCTION APP) ---
   {
     id: 'function-app-consumption',
     category: AzureCategory.SERVERLESS,
     title: 'Azure Function App (Consumption)',
-    description: 'Deploys an Azure Function App on the Consumption Plan. This is a true serverless model where you only pay for the time your code runs. It includes a required associated Storage Account and Application Insights for monitoring. Ideal for event-driven workloads.',
+    description: 'Deploys an Azure Function App on the Consumption Plan. Includes required Storage Account and Application Insights.',
     whatItDoes: [
         "Creates Storage Account (Required)",
         "Creates Application Insights",
-        "Creates Function App (Consumption)",
-        "Enables System Assigned Managed Identity"
+        "Creates Function App (Consumption)"
     ],
     limitations: [
-        "Cold Starts: App may take seconds to wake up after inactivity.",
-        "Timeout: Execution time limited to 10 minutes max."
+        "Cold Starts: App may take seconds to wake up."
     ],
     commonIssues: [
-        "Storage Connection: Ensure the storage account name is globally unique and lowercase.",
-        "Runtime Mismatch: Ensure your local dev environment matches the runtime stack selected here."
+        "Storage Connection: Ensure storage name is unique."
     ],
     inputs: [
       { id: 'rgSuffix', label: 'RG Suffix', type: 'text', defaultValue: 'func' },
-      { id: 'funcName', label: 'Function App Name', type: 'text', defaultValue: 'func-app-01', description: 'Globally unique' },
+      { id: 'funcName', label: 'Function App Name', type: 'text', defaultValue: 'func-app-01' },
       { id: 'runtime', label: 'Runtime Stack', type: 'select', options: ['DotNet', 'Node', 'Python', 'Java', 'PowerShell'], defaultValue: 'Node' }
     ],
     learnLinks: [{ title: 'Create Function App', url: 'https://learn.microsoft.com/en-us/azure/azure-functions/create-first-function-vs-code-node' }],
     diagramCode: `graph LR
-    Event[Event Trigger] --> Func[Function App]
-    Func --> Storage[Storage Account]
-    Func --> AppInsights[App Insights]`,
+    Event[Event Source] --> Func[Function App]
+    subgraph "New Deployment: {{location}}"
+      Func --> Storage[Storage Account]
+      Func --> AppInsights[App Insights]
+    end
+    ${DIAGRAM_STYLES}
+    class Event existing;
+    class Func,Storage,AppInsights new;`,
     scriptTemplate: `# Function App (Consumption)
 ${BASE_RG}
 ${BASE_LOC}
@@ -425,7 +583,7 @@ $Tags = ${COMMON_TAGS}
 New-AzResourceGroup -Name $RgName -Location $Location -Tag $Tags -Force
 
 Write-Host "Creating Storage Account: $StorageName..."
-$st = New-AzStorageAccount -ResourceGroupName $RgName -Name $StorageName -SkuName Standard_LRS -Location $Location -Tag $Tags
+$st = New-AzStorageAccount -ResourceGroupName $RgName -Name $StorageName -SkuName Standard_LRS -Location $Location -Kind StorageV2 -Tag $Tags
 
 Write-Host "Creating App Insights..."
 $ai = New-AzApplicationInsights -ResourceGroupName $RgName -Name "$FuncName-ai" -Location $Location -Tag $Tags
@@ -442,19 +600,17 @@ Write-Host "Function App Deployed: https://$FuncName.azurewebsites.net"`
     id: 'container-apps',
     category: AzureCategory.SERVERLESS,
     title: 'Azure Container Apps',
-    description: 'Deploys an Azure Container Apps environment and a sample container app. This service allows you to run microservices and containerized applications on a serverless platform powered by Kubernetes, with support for KEDA-based scaling (including scale-to-zero).',
+    description: 'Deploys an Azure Container Apps environment and a sample container app. Supports KEDA-based scaling.',
     whatItDoes: [
         "Creates Log Analytics Workspace",
         "Creates Container Apps Environment",
         "Deploys Hello World Container App"
     ],
     limitations: [
-        "Does not configure VNet integration (External ingress used)",
-        "Does not configure Dapr components"
+        "Does not configure VNet integration"
     ],
     commonIssues: [
-        "Module Missing: Requires 'Az.ContainerApp' module.",
-        "Region Availability: Not all regions support Container Apps (e.g., some older regions)."
+        "Module Missing: Requires 'Az.ContainerApp' module."
     ],
     inputs: [
       { id: 'rgSuffix', label: 'RG Suffix', type: 'text', defaultValue: 'aca' },
@@ -463,12 +619,17 @@ Write-Host "Function App Deployed: https://$FuncName.azurewebsites.net"`
     ],
     learnLinks: [{ title: 'Azure Container Apps Overview', url: 'https://learn.microsoft.com/en-us/azure/container-apps/overview' }],
     diagramCode: `graph TD
-    Internet --> Envoy[Ingress]
-    subgraph "Container Apps Env"
-      Envoy --> App[Container App]
-      App --> Replicas[Replica Set (0..N)]
+    Internet((Internet)) --> Envoy[Ingress]
+    subgraph "New Deployment: {{location}}"
+      subgraph "Container Apps Env"
+        Envoy --> App[Container App]
+        App --> Replicas[Replica Set]
+      end
+      App --> Log[Log Analytics]
     end
-    App --> Log[Log Analytics]`,
+    ${DIAGRAM_STYLES}
+    class Internet existing;
+    class Envoy,App,Replicas,Log new;`,
     scriptTemplate: `# Azure Container Apps
 ${BASE_RG}
 ${BASE_LOC}
@@ -497,17 +658,15 @@ Write-Host "Container App Deployed."`
     id: 'static-web-app',
     category: AzureCategory.SERVERLESS,
     title: 'Azure Static Web Apps',
-    description: 'Deploys an Azure Static Web App resource. This service is designed for hosting static web applications (React, Vue, Angular) with a serverless backend (Azure Functions) and global distribution. It includes built-in SSL and GitHub Actions integration.',
+    description: 'Deploys an Azure Static Web App resource. Designed for hosting static web applications with a serverless backend.',
     whatItDoes: [
         "Creates Static Web App Resource"
     ],
     limitations: [
-        "Does not create GitHub Repository",
-        "Does not create GitHub Actions workflow file (must be done via Token output)"
+        "Does not create GitHub Repository"
     ],
     commonIssues: [
-        "Deployment Token: You must copy the deployment token after creation to configure your CI/CD pipeline.",
-        "Free Tier Limits: Free tier has bandwidth and function execution limits."
+        "Deployment Token: Must be used to configure CI/CD."
     ],
     inputs: [
       { id: 'rgSuffix', label: 'RG Suffix', type: 'text', defaultValue: 'web' },
@@ -516,10 +675,15 @@ Write-Host "Container App Deployed."`
     ],
     learnLinks: [{ title: 'Create Static Web App', url: 'https://learn.microsoft.com/en-us/azure/static-web-apps/get-started-portal' }],
     diagramCode: `graph LR
-    User[Global User] --> Edge[Edge Server]
-    Edge --> Content[Static Content]
-    Edge --> API[Managed Functions]
-    Content --> GitHub[GitHub Actions]`,
+    User((User)) --> Edge[Edge Server]
+    GitHub[GitHub Actions] --> Content
+    subgraph "New Deployment: Global"
+      Edge --> Content[Static Content]
+      Edge --> API[Managed Functions]
+    end
+    ${DIAGRAM_STYLES}
+    class User,GitHub existing;
+    class Edge,Content,API new;`,
     scriptTemplate: `# Azure Static Web App
 ${BASE_RG}
 ${BASE_LOC}
@@ -537,23 +701,21 @@ Write-Host "Default Hostname: $($swa.DefaultHostname)"
 Write-Host "NOTE: Retrieve deployment token via portal or 'Get-AzStaticWebAppUserProvidedFunctionApp' logic for CI/CD."`
   },
 
-  // --- SERVERLESS (APP SERVICE - LEGACY ENTRY) ---
+  // --- SERVERLESS (APP SERVICE) ---
   {
     id: 'app-service-linux',
     category: AzureCategory.SERVERLESS,
     title: 'Web App (Linux)',
-    description: 'Deploys a Standard tier Linux App Service Plan and a corresponding Web App. This PAAS offering abstracts the OS management, providing built-in scaling, patching, and CI/CD integration capabilities.',
+    description: 'Deploys a Standard tier Linux App Service Plan and a corresponding Web App.',
     whatItDoes: [
         "Creates Standard App Service Plan (Linux)",
         "Creates Web App"
     ],
     limitations: [
-        "Does not configure Application Insights",
-        "Does not configure Deployment Slots"
+        "Does not configure Application Insights"
     ],
     commonIssues: [
-        "Cold Starts: If you scale down to the Free/Shared tier, apps will sleep after inactivity.",
-        "Container Timeout: If using Docker, heavy containers may time out during startup (default 230s). Set WEBSITES_CONTAINER_START_TIME_LIMIT to increase."
+        "Cold Starts: Free/Shared tier apps sleep after inactivity."
     ],
     inputs: [
       { id: 'rgSuffix', label: 'RG Suffix', type: 'text', defaultValue: 'web' },
@@ -562,18 +724,21 @@ Write-Host "NOTE: Retrieve deployment token via portal or 'Get-AzStaticWebAppUse
     ],
     learnLinks: [{ title: 'Create Web App', url: 'https://learn.microsoft.com/en-us/azure/app-service/scripts/powershell-deploy-linux-docker' }],
     diagramCode: `graph TD
-    User -->|HTTPS| AFD[Front Door]
-    AFD --> WebApp[App Service]
-    subgraph "App Service Plan"
-      WebApp
-    end`,
+    User((User)) -->|HTTPS| WebApp[App Service]
+    subgraph "New Deployment: {{location}}"
+      subgraph "App Service Plan"
+        WebApp
+      end
+    end
+    ${DIAGRAM_STYLES}
+    class User existing;
+    class WebApp new;`,
     scriptTemplate: `# Linux Web App
 ${BASE_RG}
 ${BASE_LOC}
 $AppName = "{{appName}}"
 $SkuFull = "{{sku}}"
-# Parse "Standard (S1)" -> "S1" or "Standard" depending on what cmd requires. 
-# New-AzAppServicePlan uses Tier and WorkerSize generally.
+# Parse "Standard (S1)" -> "S1" or "Standard"
 $Tier = if($SkuFull -match "Premium"){"PremiumV3"}elseif($SkuFull -match "Standard"){"Standard"}elseif($SkuFull -match "Basic"){"Basic"}else{"Free"}
 $Size = if($SkuFull -match "P1v3"){"P1v3"}elseif($SkuFull -match "S1"){"S1"}elseif($SkuFull -match "B1"){"B1"}else{"F1"}
 $PlanName = "$AppName-plan"
@@ -595,18 +760,16 @@ Write-Host "Web App Deployed: https://$AppName.azurewebsites.net"`
     id: 'identity-uami',
     category: AzureCategory.IDENTITY,
     title: 'User Assigned Managed Identity',
-    description: 'Deploys a standalone User Assigned Managed Identity (UAMI). Unlike System Assigned identities which are tied to the lifecycle of a specific resource, UAMIs are independent Azure resources that can be assigned to multiple resources (e.g., a fleet of VMs) simultaneously, simplifying permission management.',
+    description: 'Deploys a standalone User Assigned Managed Identity (UAMI). Can be assigned to multiple resources.',
     whatItDoes: [
         "Creates User Assigned Identity Resource",
         "Outputs Client ID and Principal ID"
     ],
     limitations: [
-        "Does not assign the identity to any Azure resource (must be done on target resource)",
-        "Does not assign RBAC permissions to the identity"
+        "Does not assign the identity to any Azure resource"
     ],
     commonIssues: [
-        "Propagation Delay: After creation, it may take 1-2 minutes before the Principal ID is recognized by Role Assignment endpoints.",
-        "Cross-Region: UAMIs are regional resources but can generally be used by resources in the same region."
+        "Propagation Delay: Principal ID may take time to replicate."
     ],
     inputs: [
       { id: 'rgSuffix', label: 'RG Suffix', type: 'text', defaultValue: 'identity' },
@@ -615,8 +778,14 @@ Write-Host "Web App Deployed: https://$AppName.azurewebsites.net"`
     learnLinks: [{ title: 'Managed Identities Overview', url: 'https://learn.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/overview' }],
     diagramCode: `graph LR
     AzureAD[Entra ID] -->|Trust| ID[User Assigned Identity]
-    ID -.->|Assigned To| VM1
-    ID -.->|Assigned To| VM2`,
+    subgraph "New Deployment: {{location}}"
+      ID
+    end
+    ID -.->|Assign To| VM1[Existing VM]
+    ID -.->|Assign To| VM2[Existing VM]
+    ${DIAGRAM_STYLES}
+    class AzureAD,VM1,VM2 existing;
+    class ID new;`,
     scriptTemplate: `# User Assigned Identity
 $ErrorActionPreference = "Stop"
 ${BASE_RG}
@@ -640,19 +809,17 @@ Write-Host "Assign this identity to your VMs or App Services."`
     id: 'identity-sp',
     category: AzureCategory.IDENTITY,
     title: 'Service Principal (App Reg)',
-    description: 'Creates an Entra ID (Azure AD) App Registration and a corresponding Service Principal. It generates a Client Secret (password) for authentication. This is the standard authentication method for CI/CD pipelines (GitHub Actions, Azure DevOps) and external 3rd-party applications integrating with Azure.',
+    description: 'Creates an Entra ID (Azure AD) App Registration and a corresponding Service Principal.',
     whatItDoes: [
         "Creates App Registration",
         "Creates Service Principal",
-        "Generates Client Secret (1 Year Validity)"
+        "Generates Client Secret"
     ],
     limitations: [
-        "Does not grant Subscription permissions (RBAC must be assigned separately)",
-        "Client Secret is shown only once in output"
+        "Does not grant Subscription permissions"
     ],
     commonIssues: [
-        "Secret Management: The generated secret text is only available immediately after creation. Store it securely in a Key Vault.",
-        "Permission Delay: If you immediately try to assign roles to this SP, it might fail with 'PrincipalNotFound' for a few seconds until replication completes."
+        "Secret Management: Secret shown only once."
     ],
     inputs: [
       { id: 'appName', label: 'App Display Name', type: 'text', defaultValue: 'sp-cicd-pipeline' }
@@ -660,13 +827,17 @@ Write-Host "Assign this identity to your VMs or App Services."`
     learnLinks: [{ title: 'App Objects & Service Principals', url: 'https://learn.microsoft.com/en-us/azure/active-directory/develop/app-objects-and-service-principals' }],
     diagramCode: `graph TD
     Ext[GitHub / DevOps] -->|Client ID + Secret| AAD[Entra ID]
-    AAD -->|Token| SP[Service Principal]
-    SP -->|RBAC| Azure[Azure Resources]`,
+    subgraph "New Directory Object"
+      AAD -->|Token| SP[Service Principal]
+    end
+    SP -->|RBAC| Azure[Azure Resources]
+    ${DIAGRAM_STYLES}
+    class Ext,AAD,Azure existing;
+    class SP new;`,
     scriptTemplate: `# Service Principal Creation
 $ErrorActionPreference = "Stop"
 $AppName = "{{appName}}"
 
-# Note: This script requires privileges to create App Registrations in Entra ID
 Write-Host "Creating App Registration..."
 $app = New-AzADApplication -DisplayName $AppName
 
@@ -680,8 +851,7 @@ Write-Host "--------------------------------------------------" -ForegroundColor
 Write-Host "Tenant ID:     $((Get-AzContext).Tenant.Id)"
 Write-Host "App (Client) ID: $($app.AppId)"
 Write-Host "Client Secret: $($secret.Password)" -ForegroundColor Yellow
-Write-Host "--------------------------------------------------" -ForegroundColor Green
-Write-Host "WARNING: Copy the secret now. It cannot be retrieved later." -ForegroundColor Red`
+Write-Host "--------------------------------------------------" -ForegroundColor Green`
   },
 
   // --- IDENTITY (RBAC) ---
@@ -689,18 +859,15 @@ Write-Host "WARNING: Copy the secret now. It cannot be retrieved later." -Foregr
     id: 'identity-rbac',
     category: AzureCategory.IDENTITY,
     title: 'Assign Role (RBAC)',
-    description: 'Grants access to an Azure Resource Group by assigning a built-in Role (e.g., Contributor, Reader) to a specific user, group, or service principal. This automates the implementation of the Principle of Least Privilege.',
+    description: 'Grants access to an Azure Resource Group by assigning a built-in Role.',
     whatItDoes: [
-        "Validates Principal existence",
         "Creates Role Assignment at Resource Group Scope"
     ],
     limitations: [
-        "Scopes permission to the entire Resource Group",
-        "Requires 'Owner' or 'User Access Administrator' permissions to execute"
+        "Scopes permission to the entire Resource Group"
     ],
     commonIssues: [
-        "Self-Lockout: Do not remove your own Owner access.",
-        "Propagation: Role assignments can take up to 5-10 minutes to propagate to all Azure regions/services."
+        "Propagation: Assignments take time to replicate."
     ],
     inputs: [
       { id: 'rgName', label: 'Resource Group Name', type: 'text', defaultValue: 'rg-demo-dev' },
@@ -709,9 +876,13 @@ Write-Host "WARNING: Copy the secret now. It cannot be retrieved later." -Foregr
     ],
     learnLinks: [{ title: 'Azure RBAC Overview', url: 'https://learn.microsoft.com/en-us/azure/role-based-access-control/overview' }],
     diagramCode: `graph LR
-    User[User/SP] -->|Assignment| Role[Role Definition]
-    Role -->|Scope| RG[Resource Group]
-    RG --> Resources`,
+    User[User/SP] -->|Assigns| Role[Role Definition]
+    subgraph "Scope: {{rgName}}"
+      Role -->|Assignment| RG[Resource Group]
+    end
+    ${DIAGRAM_STYLES}
+    class User,Role,RG existing;
+    linkStyle 1 stroke:#2563eb,stroke-width:4px;`,
     scriptTemplate: `# RBAC Role Assignment
 $ErrorActionPreference = "Stop"
 $RgName = "{{rgName}}"
@@ -720,7 +891,6 @@ $RoleName = "{{roleName}}"
 
 Write-Host "Assigning '$RoleName' to $PrincipalId on $RgName..."
 
-# Verify RG exists
 if (-not (Get-AzResourceGroup -Name $RgName -ErrorAction SilentlyContinue)) {
     Write-Error "Resource Group '$RgName' not found."
 }
@@ -735,34 +905,34 @@ Write-Host "Role Assigned successfully."`
     id: 'kv-standard',
     category: AzureCategory.SECURITY,
     title: 'Azure Key Vault',
-    description: 'Deploys a secure Azure Key Vault configured with the Role-Based Access Control (RBAC) permission model, replacing the legacy Access Policy model. Soft-delete is mandatory and enabled by default to protect against accidental deletion of secrets. You can select between Standard (software-backed) and Premium (HSM-backed) SKUs.',
+    description: 'Deploys a secure Azure Key Vault configured with RBAC.',
     whatItDoes: [
         "Deploys Key Vault (Standard/Premium)",
-        "Enables Soft Delete (Retention 90 days)",
+        "Enables Soft Delete",
         "Enables RBAC Authorization model"
     ],
     limitations: [
-        "Does not create Private Endpoints",
-        "Does not populate secrets"
+        "Does not create Private Endpoints"
     ],
     commonIssues: [
-        "Soft Delete Conflict: If you delete a KV and try to recreate it with the same name immediately, it will fail unless you purge the deleted vault.",
-        "Access Denied: Even as 'Owner', you must assign yourself 'Key Vault Secrets User' role to read secrets in the RBAC model."
+        "Access Denied: Even 'Owner' needs 'Key Vault Secrets User' role."
     ],
     inputs: [
       { id: 'rgSuffix', label: 'RG Suffix', type: 'text', defaultValue: 'sec' },
-      { id: 'kvName', label: 'Key Vault Name', type: 'text', defaultValue: 'kv-shared-01', description: 'Must be globally unique' },
-      { id: 'sku', label: 'SKU', type: 'select', options: ['Standard', 'Premium'], defaultValue: 'Standard', description: 'Premium offers HSM-backed keys.' }
+      { id: 'kvName', label: 'Key Vault Name', type: 'text', defaultValue: 'kv-shared-01' },
+      { id: 'sku', label: 'SKU', type: 'select', options: ['Standard', 'Premium'], defaultValue: 'Standard' }
     ],
-    learnLinks: [
-        { title: 'Create Key Vault', url: 'https://learn.microsoft.com/en-us/azure/key-vault/general/quick-create-powershell' },
-        { title: 'Key Vault RBAC', url: 'https://learn.microsoft.com/en-us/azure/key-vault/general/rbac-guide' }
-    ],
+    learnLinks: [{ title: 'Create Key Vault', url: 'https://learn.microsoft.com/en-us/azure/key-vault/general/quick-create-powershell' }],
     diagramCode: `graph LR
-    App -->|Managed Identity| KV[Key Vault]
-    KV --> Secrets
-    KV --> Keys
-    KV --> Certs`,
+    App[App Service] -->|Managed Identity| KV[Key Vault]
+    subgraph "New Deployment: {{location}}"
+      KV --> Secrets
+      KV --> Keys
+      KV --> Certs
+    end
+    ${DIAGRAM_STYLES}
+    class App existing;
+    class KV,Secrets,Keys,Certs new;`,
     scriptTemplate: `# Key Vault Deployment
 ${BASE_RG}
 ${BASE_LOC}
@@ -783,32 +953,35 @@ Write-Host "Key Vault $KvName ($Sku) created with RBAC model."`
     id: 'azure-firewall',
     category: AzureCategory.SECURITY,
     title: 'Azure Firewall',
-    description: 'Deploys Azure Firewall, a managed, cloud-based network security service that protects your Azure Virtual Network resources. It creates a high-availability firewall with a public IP and the mandatory "AzureFirewallSubnet". This resource is critical for centralized network filtering and threat intelligence.',
+    description: 'Deploys Azure Firewall with a public IP and the mandatory "AzureFirewallSubnet".',
     whatItDoes: [
         "Creates VNet with 'AzureFirewallSubnet'",
         "Deploys Public IP",
-        "Deploys Azure Firewall (Basic/Standard/Premium)"
+        "Deploys Azure Firewall"
     ],
     limitations: [
-        "Does not configure specific application or network rules",
-        "Does not configure Firewall Policy (uses legacy rules, or empty policy)"
+        "Does not configure Firewall Policy"
     ],
     commonIssues: [
-        "Subnet Name: Must be exactly 'AzureFirewallSubnet'.",
-        "Subnet Size: Must be /26 or larger.",
-        "Cost: Azure Firewall has a significant hourly fixed cost, even when idle."
+        "Subnet Name: Must be 'AzureFirewallSubnet'.",
+        "Cost: Significant hourly cost."
     ],
     inputs: [
       { id: 'rgSuffix', label: 'RG Suffix', type: 'text', defaultValue: 'fw' },
       { id: 'fwName', label: 'Firewall Name', type: 'text', defaultValue: 'azfw-hub-01' },
-      { id: 'sku', label: 'SKU Tier', type: 'select', options: ['Basic', 'Standard', 'Premium'], defaultValue: 'Standard', description: 'Basic is for SMBs, Premium adds IDPS/TLS inspection.' }
+      { id: 'sku', label: 'SKU Tier', type: 'select', options: ['Basic', 'Standard', 'Premium'], defaultValue: 'Standard' }
     ],
     learnLinks: [{ title: 'Deploy Azure Firewall', url: 'https://learn.microsoft.com/en-us/azure/firewall/deploy-ps' }],
     diagramCode: `graph TD
-    Internet -->|Traffic| FW[Azure Firewall]
-    FW -->|Filter| VNet[Hub VNet]
+    Internet((Internet)) -->|Traffic| FW[Azure Firewall]
+    subgraph "New Deployment: {{location}}"
+      FW -->|Filter| VNet[Hub VNet]
+    end
     VNet -->|Peering| Spoke1[Spoke VNet 1]
-    VNet -->|Peering| Spoke2[Spoke VNet 2]`,
+    VNet -->|Peering| Spoke2[Spoke VNet 2]
+    ${DIAGRAM_STYLES}
+    class Internet,Spoke1,Spoke2 existing;
+    class FW,VNet new;`,
     scriptTemplate: `# Azure Firewall Deployment
 ${BASE_RG}
 ${BASE_LOC}
@@ -827,7 +1000,6 @@ Write-Host "Creating Public IP..."
 $pip = New-AzPublicIpAddress -ResourceGroupName $RgName -Location $Location -Name "$FwName-pip" -AllocationMethod Static -Sku Standard
 
 Write-Host "Deploying Azure Firewall ($SkuTier)..."
-# Note: Basic SKU requires specific management subnet logic, simpler Standard template shown here for robustness
 New-AzFirewall -Name $FwName -ResourceGroupName $RgName -Location $Location -VirtualNetworkName $vnet.Name -PublicIpName $pip.Name -SkuName "AZFW_VNet" -SkuTier $SkuTier -Tag $Tags
 
 Write-Host "Firewall Deployed."`
@@ -838,32 +1010,34 @@ Write-Host "Firewall Deployed."`
     id: 'app-gateway-waf',
     category: AzureCategory.SECURITY,
     title: 'App Gateway WAF v2',
-    description: 'Deploys an Application Gateway v2 with Web Application Firewall (WAF) enabled. This protects web applications from common exploits and vulnerabilities (OWASP Top 10) such as SQL injection and cross-site scripting. Includes autoscaling configuration.',
+    description: 'Deploys an Application Gateway v2 with Web Application Firewall (WAF) enabled.',
     whatItDoes: [
         "Creates VNet with dedicated subnet",
         "Deploys Public IP",
-        "Deploys App Gateway WAF v2",
-        "Configures Autoscaling"
+        "Deploys App Gateway WAF v2"
     ],
     limitations: [
-        "Does not configure backend targets (add backend pools later)",
-        "Does not upload SSL certificates (HTTP only for initial setup)"
+        "Does not configure backend targets"
     ],
     commonIssues: [
-        "Subnet Exclusivity: The App Gateway subnet can ONLY contain App Gateway instances.",
-        "Provisioning Time: Can take 15-20 minutes to fully provision.",
-        "Empty Backend: Will return 502 Bad Gateway until backends are added and healthy."
+        "Provisioning Time: Can take 15-20 minutes."
     ],
     inputs: [
       { id: 'rgSuffix', label: 'RG Suffix', type: 'text', defaultValue: 'waf' },
       { id: 'agwName', label: 'Gateway Name', type: 'text', defaultValue: 'agw-waf-01' },
-      { id: 'capacity', label: 'Max Capacity Units', type: 'number', defaultValue: 10, description: 'Autoscale limit (0-125)' }
+      { id: 'capacity', label: 'Max Capacity Units', type: 'number', defaultValue: 10 }
     ],
     learnLinks: [{ title: 'Create App Gateway WAF', url: 'https://learn.microsoft.com/en-us/azure/web-application-firewall/ag/create-waf-policy-ag' }],
     diagramCode: `graph TB
-    User -->|HTTPS| WAF[App Gateway WAF]
-    WAF -->|Protect| WebApp1
-    WAF -->|Protect| WebApp2`,
+    User((User)) -->|HTTPS| WAF[App Gateway WAF]
+    subgraph "New Deployment: {{location}}"
+      WAF
+    end
+    WAF -->|Protect| WebApp1[Existing App 1]
+    WAF -->|Protect| WebApp2[Existing App 2]
+    ${DIAGRAM_STYLES}
+    class User,WebApp1,WebApp2 existing;
+    class WAF new;`,
     scriptTemplate: `# Application Gateway WAF v2
 ${BASE_RG}
 ${BASE_LOC}
@@ -906,18 +1080,16 @@ Write-Host "WAF Deployed."`
     id: 'sentinel-starter',
     category: AzureCategory.SECURITY,
     title: 'Microsoft Sentinel',
-    description: 'Deploys a Log Analytics Workspace and enables Microsoft Sentinel on top of it. Sentinel is a cloud-native SIEM (Security Information and Event Management) and SOAR (Security Orchestration Automation and Response) solution that provides intelligent security analytics across your enterprise.',
+    description: 'Deploys a Log Analytics Workspace and enables Microsoft Sentinel on top of it.',
     whatItDoes: [
         "Creates Log Analytics Workspace",
         "Installs 'SecurityInsights' (Sentinel) Solution"
     ],
     limitations: [
-        "Does not configure Data Connectors",
-        "Does not configure Analytics Rules"
+        "Does not configure Data Connectors"
     ],
     commonIssues: [
-        "Cost: Sentinel adds a cost on top of Log Analytics ingestion. Check pricing tiers.",
-        "Retention: Default retention is 30 days. Increase this in the workspace settings for compliance."
+        "Cost: Sentinel adds a cost on top of Log Analytics."
     ],
     inputs: [
       { id: 'rgSuffix', label: 'RG Suffix', type: 'text', defaultValue: 'siem' },
@@ -927,8 +1099,13 @@ Write-Host "WAF Deployed."`
     diagramCode: `graph LR
     Logs[Activity Logs] --> LA[Log Analytics]
     VMs[VM Events] --> LA
-    LA --> Sentinel[Microsoft Sentinel]
-    Sentinel --> Alerts`,
+    subgraph "New Deployment: {{location}}"
+      LA --> Sentinel[Microsoft Sentinel]
+      Sentinel --> Alerts
+    end
+    ${DIAGRAM_STYLES}
+    class Logs,VMs existing;
+    class LA,Sentinel,Alerts new;`,
     scriptTemplate: `# Microsoft Sentinel Setup
 ${BASE_RG}
 ${BASE_LOC}
@@ -941,7 +1118,6 @@ Write-Host "Creating Log Analytics Workspace..."
 $la = New-AzOperationalInsightsWorkspace -ResourceGroupName $RgName -Name $WorkspaceName -Location $Location -Sku Standard -Tag $Tags
 
 Write-Host "Enabling Sentinel Solution..."
-# Sentinel is technically a solution named 'SecurityInsights' on the workspace
 New-AzOperationalInsightsSolution -ResourceGroupName $RgName -WorkspaceResourceId $la.ResourceId -SolutionName "SecurityInsights" -Provider "Microsoft.OperationsManagement" -Tag $Tags
 
 Write-Host "Sentinel Onboarded."`
@@ -952,21 +1128,17 @@ Write-Host "Sentinel Onboarded."`
     id: 'storage-blob-gpv2',
     category: AzureCategory.STORAGE,
     title: 'Azure Storage Account (Blob)',
-    description: 'Deploys a General Purpose v2 (GPv2) Storage Account optimized for general blob storage use cases. It automatically creates a default container for immediate use. GPv2 is the industry standard for storing objects like images, logs, and backups.',
+    description: 'Deploys a General Purpose v2 (GPv2) Storage Account optimized for general blob storage use cases.',
     whatItDoes: [
         "Creates GPv2 Storage Account",
-        "Enables 'Hot' access tier by default",
+        "Enables 'Hot' access tier",
         "Creates a private Blob Container"
     ],
     limitations: [
-        "Does not configure Lifecycle Management policies",
-        "Does not configure Virtual Network firewall rules",
-        "Does not enable immutable storage (WORM)"
+        "Does not configure Lifecycle Management policies"
     ],
     commonIssues: [
-        "Naming: Storage names must be 3-24 chars, lowercase alphanumeric ONLY, and globally unique.",
-        "Public Access: Scripts often default to blocking public blob access for security. Check 'AllowBlobPublicAccess' if needed.",
-        "Replication: GRS/RA-GRS is significantly more expensive than LRS."
+        "Naming: Storage names must be globally unique."
     ],
     inputs: [
       { id: 'rgSuffix', label: 'RG Suffix', type: 'text', defaultValue: 'store' },
@@ -976,10 +1148,14 @@ Write-Host "Sentinel Onboarded."`
     ],
     learnLinks: [{ title: 'Create Storage Account', url: 'https://learn.microsoft.com/en-us/azure/storage/common/storage-account-create?tabs=azure-powershell' }],
     diagramCode: `graph LR
-    User -->|HTTPS| Blob[Blob Service]
-    Blob --> Container
-    Container --> File1
-    Container --> File2`,
+    User((User)) -->|HTTPS| Blob[Blob Service]
+    subgraph "New Deployment: {{location}}"
+      Blob --> Container
+      Container --> File1
+    end
+    ${DIAGRAM_STYLES}
+    class User existing;
+    class Blob,Container,File1 new;`,
     scriptTemplate: `# Storage Account (Blob)
 $ErrorActionPreference = "Stop"
 ${BASE_RG}
@@ -1007,23 +1183,21 @@ Write-Host "Storage Account Created."`
     id: 'storage-files',
     category: AzureCategory.STORAGE,
     title: 'Azure Files (SMB Share)',
-    description: 'Deploys a Storage Account and creates a standard SMB 3.0 File Share. This is ideal for "Lift and Shift" scenarios where legacy applications require a mapped network drive, or for sharing configuration files between multiple VMs.',
+    description: 'Deploys a Storage Account and creates a standard SMB 3.0 File Share.',
     whatItDoes: [
         "Creates GPv2 Storage Account",
         "Creates SMB File Share",
         "Sets Quota Limit"
     ],
     limitations: [
-        "Does not configure Active Directory Domain Services (AD DS) authentication",
-        "Does not configure Azure File Sync"
+        "Does not configure AD DS authentication"
     ],
     commonIssues: [
-        "Port 445: Most residential ISPs block outbound port 445. You may not be able to mount this share from your home PC.",
-        "Mounting: Requires the Storage Account Key for mounting unless Identity-based auth is configured."
+        "Port 445: ISPs often block outbound port 445."
     ],
     inputs: [
       { id: 'rgSuffix', label: 'RG Suffix', type: 'text', defaultValue: 'files' },
-      { id: 'accountName', label: 'Account Name', type: 'text', defaultValue: 'stfiles001', description: 'Lowercase, numbers only, unique' },
+      { id: 'accountName', label: 'Account Name', type: 'text', defaultValue: 'stfiles001' },
       { id: 'shareName', label: 'Share Name', type: 'text', defaultValue: 'share-01' },
       { id: 'quota', label: 'Quota (GB)', type: 'number', defaultValue: 100 }
     ],
@@ -1031,7 +1205,12 @@ Write-Host "Storage Account Created."`
     diagramCode: `graph LR
     VM1[Windows VM] -->|SMB 3.0| Share[Azure File Share]
     VM2[Linux VM] -->|SMB 3.0| Share
-    Share --> Folder --> Files`,
+    subgraph "New Deployment: {{location}}"
+      Share --> Folder --> Files
+    end
+    ${DIAGRAM_STYLES}
+    class VM1,VM2 existing;
+    class Share,Folder,Files new;`,
     scriptTemplate: `# Azure Files Deployment
 $ErrorActionPreference = "Stop"
 ${BASE_RG}
@@ -1060,29 +1239,33 @@ Write-Host "File Share Created."`
     id: 'storage-datalake-gen2',
     category: AzureCategory.STORAGE,
     title: 'Data Lake Storage Gen2',
-    description: 'Deploys a Storage Account with Hierarchical Namespaces (HNS) enabled. This converges the capabilities of Blob Storage and Data Lake Gen1, making it the primary storage solution for building Enterprise Data Lakes and running Big Data analytics.',
+    description: 'Deploys a Storage Account with Hierarchical Namespaces (HNS) enabled.',
     whatItDoes: [
         "Creates Storage Account with HNS Enabled",
         "Creates root filesystem (Container)"
     ],
     limitations: [
-        "Cannot disable HNS after creation",
-        "Does not set up Role-Based Access Control (RBAC) for data plane"
+        "Cannot disable HNS after creation"
     ],
     commonIssues: [
-        "Driver Compatibility: Ensure your client applications use the ABFS driver.",
-        "Soft Delete: Verify soft delete retention periods if frequently overwriting data."
+        "Driver Compatibility: Ensure client uses ABFS driver."
     ],
     inputs: [
       { id: 'rgSuffix', label: 'RG Suffix', type: 'text', defaultValue: 'lake' },
-      { id: 'accountName', label: 'Account Name', type: 'text', defaultValue: 'stdatalake001', description: 'Lowercase, numbers only, unique' },
+      { id: 'accountName', label: 'Account Name', type: 'text', defaultValue: 'stdatalake001' },
       { id: 'fsName', label: 'Filesystem Name', type: 'text', defaultValue: 'raw-data' }
     ],
     learnLinks: [{ title: 'Introduction to Data Lake Gen2', url: 'https://learn.microsoft.com/en-us/azure/storage/blobs/data-lake-storage-introduction' }],
     diagramCode: `graph TB
     Source[Data Sources] -->|Ingest| ADLS[Data Lake Gen2]
+    subgraph "New Deployment: {{location}}"
+      ADLS
+    end
     ADLS -->|Analyze| Synapse[Synapse Analytics]
-    ADLS -->|Train| ML[Machine Learning]`,
+    ADLS -->|Train| ML[Machine Learning]
+    ${DIAGRAM_STYLES}
+    class Source,Synapse,ML existing;
+    class ADLS new;`,
     scriptTemplate: `# Data Lake Gen2 Deployment
 $ErrorActionPreference = "Stop"
 ${BASE_RG}
@@ -1109,36 +1292,39 @@ Write-Host "Data Lake Gen2 Ready."`
     id: 'bastion-vnet',
     category: AzureCategory.NETWORKING,
     title: 'Azure Bastion & VNet',
-    description: 'Deploys a secure Virtual Network containing the specialized AzureBastionSubnet and a Standard SKU Bastion Host. This enables secure RDP/SSH connectivity to your VMs directly from the Azure Portal over SSL, eliminating the need for public IPs on your virtual machines.',
+    description: 'Deploys a secure Virtual Network containing the specialized AzureBastionSubnet and a Standard SKU Bastion Host.',
     whatItDoes: [
         "Creates VNet and 'AzureBastionSubnet'",
         "Deploys Standard Public IP",
-        "Deploys Azure Bastion Service (Standard SKU)"
+        "Deploys Azure Bastion Service"
     ],
     limitations: [
-        "Does not deploy Jumpbox VMs",
-        "Does not configure VNet Peering"
+        "Does not deploy Jumpbox VMs"
     ],
     commonIssues: [
-        "Subnet Naming: The subnet MUST be named exactly 'AzureBastionSubnet'.",
-        "Subnet Size: The subnet must be /26 or larger (e.g., /25, /24).",
-        "Public IP SKU: Bastion requires a Standard SKU Public IP."
+        "Subnet Naming: Must be 'AzureBastionSubnet'.",
+        "Subnet Size: Must be /26 or larger."
     ],
-    prerequisites: ['vm-linux-ssh'], // Bastion is useless without a VM
+    prerequisites: ['vm-linux-ssh'],
     inputs: [
       { id: 'rgSuffix', label: 'RG Suffix', type: 'text', defaultValue: 'net' },
       { id: 'vnetName', label: 'VNet Name', type: 'text', defaultValue: 'vnet-hub' },
       { id: 'cidr', label: 'VNet CIDR', type: 'text', defaultValue: '10.1.0.0/16' }
     ],
     learnLinks: [
-        { title: 'Create Bastion Host', url: 'https://learn.microsoft.com/en-us/azure/bastion/create-host-powershell' },
-        { title: 'VNet Architecture', url: 'https://learn.microsoft.com/en-us/azure/virtual-network/virtual-networks-overview' }
+        { title: 'Create Bastion Host', url: 'https://learn.microsoft.com/en-us/azure/bastion/create-host-powershell' }
     ],
     diagramCode: `graph TD
-    User -->|HTTPS| Bastion[Azure Bastion]
-    subgraph VNet
-      Bastion -->|RDP/SSH| VM[Target VM]
-    end`,
+    User((User)) -->|HTTPS| Bastion[Azure Bastion]
+    subgraph "New Deployment: {{location}}"
+      subgraph VNet
+        Bastion
+      end
+    end
+    Bastion -->|RDP/SSH| VM[Existing Target VM]
+    ${DIAGRAM_STYLES}
+    class User,VM existing;
+    class Bastion new;`,
     scriptTemplate: `# Azure Bastion Deployment
 ${BASE_RG}
 ${BASE_LOC}
@@ -1166,31 +1352,33 @@ New-AzBastion -ResourceGroupName $RgName -Name "$VnetName-bastion" -PublicIpAddr
     id: 'frontdoor-std',
     category: AzureCategory.NETWORKING,
     title: 'Azure Front Door (Standard)',
-    description: 'Deploys a global Azure Front Door (Standard SKU) profile. This acts as a modern Content Delivery Network (CDN) and global Load Balancer, providing dynamic site acceleration and edge-caching. It creates a single global entry point for your web applications.',
+    description: 'Deploys a global Azure Front Door (Standard SKU) profile.',
     whatItDoes: [
         "Creates Front Door Standard Profile",
         "Creates a global Endpoint"
     ],
     limitations: [
-        "Does not configure Origin Groups",
-        "Does not configure WAF policies",
-        "Does not configure Custom Domains"
+        "Does not configure Origin Groups"
     ],
     commonIssues: [
-        "DNS Propagation: Front Door endpoints can take 10-30 minutes to become globally active.",
-        "Backend Health: If origins are not configured correctly, FD will return 503 errors.",
-        "Certificates: Managed certificates require CNAME validation which can block deployment if DNS isn't ready."
+        "DNS Propagation: Can take 10-30 minutes."
     ],
-    prerequisites: ['app-service-linux'], // AFD needs a backend
+    prerequisites: ['app-service-linux'],
     inputs: [
       { id: 'rgSuffix', label: 'RG Suffix', type: 'text', defaultValue: 'afd' },
       { id: 'afdName', label: 'Front Door Name', type: 'text', defaultValue: 'afd-global-01' }
     ],
     learnLinks: [{ title: 'Create Front Door', url: 'https://learn.microsoft.com/en-us/azure/frontdoor/create-front-door-powershell' }],
     diagramCode: `graph TB
-    User[Global User] -->|Anycast| AFD[Azure Front Door]
-    AFD -->|Origin| WebApp1[East US]
-    AFD -->|Origin| WebApp2[West Europe]`,
+    User((User)) -->|Anycast| AFD[Azure Front Door]
+    subgraph "New Deployment: Global"
+      AFD
+    end
+    AFD -->|Origin| WebApp1[Existing WebApp (US)]
+    AFD -->|Origin| WebApp2[Existing WebApp (EU)]
+    ${DIAGRAM_STYLES}
+    class User,WebApp1,WebApp2 existing;
+    class AFD new;`,
     scriptTemplate: `# Azure Front Door Standard
 ${BASE_RG}
 $ProfileName = "{{afdName}}"
@@ -1212,19 +1400,17 @@ Write-Host "Front Door Created. Add Origins via portal or additional scripts."`
     id: 'network-hub-spoke',
     category: AzureCategory.NETWORKING,
     title: 'Hub & Spoke Topology',
-    description: 'Deploys a Hub Virtual Network and a Spoke Virtual Network, and establishes bidirectional VNet Peering. This is the standard enterprise network topology where shared services (Firewall, Bastion, VPN) reside in the Hub, and workloads reside in isolated Spokes.',
+    description: 'Deploys a Hub VNet and a Spoke VNet, and establishes bidirectional VNet Peering.',
     whatItDoes: [
         "Creates Hub VNet",
         "Creates Spoke VNet",
         "Enables Bidirectional Peering"
     ],
     limitations: [
-        "Does not configure Gateway Transit (enabled by default in script but requires Gateway to function)",
         "Does not deploy Hub resources (Firewall/Gateway)"
     ],
     commonIssues: [
-        "IP Overlap: Ensure Hub and Spoke address spaces do not overlap.",
-        "Peering Lag: Peering status must be 'Connected' on BOTH sides to work."
+        "IP Overlap: Ensure Hub and Spoke address spaces do not overlap."
     ],
     inputs: [
       { id: 'rgSuffix', label: 'RG Suffix', type: 'text', defaultValue: 'net-core' },
@@ -1235,9 +1421,14 @@ Write-Host "Front Door Created. Add Origins via portal or additional scripts."`
     ],
     learnLinks: [{ title: 'Hub-spoke network topology', url: 'https://learn.microsoft.com/en-us/azure/architecture/reference-architectures/hybrid-networking/hub-spoke?tabs=cli' }],
     diagramCode: `graph LR
-    Hub[Hub VNet] <-->|Peering| Spoke[Spoke VNet]
-    Hub --> FW[Firewall/VPN]
-    Spoke --> VM[Workload VM]`,
+    subgraph "New Deployment: {{location}}"
+      Hub[Hub VNet] <-->|Peering| Spoke[Spoke VNet]
+    end
+    Hub -.-> FW[Future Firewall]
+    Spoke -.-> VM[Future VM]
+    ${DIAGRAM_STYLES}
+    class FW,VM existing;
+    class Hub,Spoke new;`,
     scriptTemplate: `# Hub and Spoke Network Peering
 $ErrorActionPreference = "Stop"
 ${BASE_RG}
@@ -1270,19 +1461,17 @@ Write-Host "Peering Established."`
     id: 'network-vpn-gateway',
     category: AzureCategory.NETWORKING,
     title: 'VPN Gateway (Site-to-Site)',
-    description: 'Deploys a Route-Based Virtual Network Gateway (VPN) necessary for hybrid connectivity. It creates a VNet with the specific "GatewaySubnet" required by Azure, a Public IP, and the Gateway resource itself. This allows secure, encrypted traffic between Azure and on-premises networks.',
+    description: 'Deploys a Route-Based Virtual Network Gateway (VPN).',
     whatItDoes: [
         "Creates VNet with 'GatewaySubnet'",
         "Creates Public IP (Standard)",
         "Deploys Virtual Network Gateway (VPN)"
     ],
     limitations: [
-        "Does not create the 'Local Network Gateway' (On-prem representation)",
-        "Does not create the Connection resource"
+        "Does not create the 'Local Network Gateway'"
     ],
     commonIssues: [
-        "Deployment Time: VPN Gateways take 30-45 minutes to provision. Do not cancel the script.",
-        "GatewaySubnet: Must be named exactly 'GatewaySubnet' and should ideally be /27 or larger."
+        "Deployment Time: 30-45 minutes."
     ],
     inputs: [
       { id: 'rgSuffix', label: 'RG Suffix', type: 'text', defaultValue: 'net-gw' },
@@ -1291,9 +1480,14 @@ Write-Host "Peering Established."`
     ],
     learnLinks: [{ title: 'Create VPN Gateway', url: 'https://learn.microsoft.com/en-us/azure/vpn-gateway/vpn-gateway-howto-point-to-site-resource-manager-portal' }],
     diagramCode: `graph LR
-    OnPrem[On-Premises DC] <-->|IPsec Tunnel| GW[Azure VPN Gateway]
-    GW --> HubVNet
-    HubVNet <--> SpokeVNet`,
+    OnPrem[Existing On-Prem DC] <-->|IPsec Tunnel| GW[Azure VPN Gateway]
+    subgraph "New Deployment: {{location}}"
+      GW --> HubVNet
+    end
+    HubVNet <--> SpokeVNet[Existing Spoke]
+    ${DIAGRAM_STYLES}
+    class OnPrem,SpokeVNet existing;
+    class GW,HubVNet new;`,
     scriptTemplate: `# VPN Gateway Deployment
 $ErrorActionPreference = "Stop"
 ${BASE_RG}
@@ -1327,18 +1521,17 @@ Write-Host "VPN Gateway Deployed."`
     id: 'network-nat-gateway',
     category: AzureCategory.NETWORKING,
     title: 'NAT Gateway',
-    description: 'Deploys a Virtual Network NAT Gateway. This resource provides outbound internet connectivity for one or more subnets of a virtual network. It is preferred over default Load Balancer outbound rules because it provides SNAT port scalability and static public IP association.',
+    description: 'Deploys a Virtual Network NAT Gateway.',
     whatItDoes: [
         "Creates Public IP Prefix",
         "Creates NAT Gateway Resource",
         "Creates VNet and attaches NAT to Subnet"
     ],
     limitations: [
-        "Does not migrate existing subnets (creates new VNet structure)"
+        "Does not migrate existing subnets"
     ],
     commonIssues: [
-        "Zone Redundancy: NAT Gateway is zonal. For multi-zone redundancy, standard practice varies (often 1 NAT per zone if strict isolation needed, or Standard LB).",
-        "Association: You must explicitly associate the NAT Gateway to the subnet."
+        "Zone Redundancy: NAT Gateway is zonal."
     ],
     inputs: [
       { id: 'rgSuffix', label: 'RG Suffix', type: 'text', defaultValue: 'net-nat' },
@@ -1347,9 +1540,14 @@ Write-Host "VPN Gateway Deployed."`
     ],
     learnLinks: [{ title: 'What is Azure NAT Gateway?', url: 'https://learn.microsoft.com/en-us/azure/virtual-network/nat-gateway/nat-overview' }],
     diagramCode: `graph TB
-    Subnet[Private Subnet] -->|Outbound| NAT[NAT Gateway]
-    NAT -->|Static IP| Internet
-    Internet --x|Block Ingress| NAT`,
+    Internet((Internet)) --x|Block Ingress| NAT
+    subgraph "New Deployment: {{location}}"
+      Subnet[Private Subnet] -->|Outbound| NAT[NAT Gateway]
+      NAT -->|Static IP| Internet
+    end
+    ${DIAGRAM_STYLES}
+    class Internet existing;
+    class Subnet,NAT new;`,
     scriptTemplate: `# NAT Gateway Deployment
 $ErrorActionPreference = "Stop"
 ${BASE_RG}
@@ -1374,25 +1572,79 @@ $vnet | Set-AzVirtualNetwork
 
 Write-Host "NAT Gateway deployed and attached to 'default' subnet."`
   },
+  
+  // --- NETWORKING (DNS) ---
+  {
+    id: 'dns-public',
+    category: AzureCategory.NETWORKING,
+    title: 'Azure DNS Zone',
+    description: 'Deploys a Public DNS Zone for hosting domain records. Azure DNS allows you to host your DNS domain in Azure for record management.',
+    whatItDoes: [
+        "Creates Public DNS Zone",
+        "Outputs Name Servers for delegation"
+    ],
+    limitations: [
+        "Does not purchase the domain name",
+        "Does not configure registrar NS records automatically"
+    ],
+    commonIssues: [
+        "Delegation: You must update your domain registrar's name servers to point to the Azure Name Servers provided in the output."
+    ],
+    inputs: [
+      { id: 'rgSuffix', label: 'RG Suffix', type: 'text', defaultValue: 'dns' },
+      { id: 'zoneName', label: 'Domain Name', type: 'text', defaultValue: 'contoso.com', placeholder: 'example.com' },
+      { id: 'addWww', label: 'Add "www" Record', type: 'select', options: ['Yes', 'No'], defaultValue: 'Yes', description: 'Creates a placeholder A record.' }
+    ],
+    learnLinks: [{ title: 'Azure DNS Overview', url: 'https://learn.microsoft.com/en-us/azure/dns/dns-overview' }],
+    diagramCode: `graph TD
+    User((User)) -->|Query| DNS[Azure DNS]
+    DNS -->|A Record| IP[Public IP]
+    subgraph "New Deployment: {{location}}"
+      DNS
+    end
+    ${DIAGRAM_STYLES}
+    class User,IP existing;
+    class DNS new;`,
+    scriptTemplate: `# Azure DNS Zone
+$ErrorActionPreference = "Stop"
+${BASE_RG}
+${BASE_LOC}
+$ZoneName = "{{zoneName}}"
+$AddWww = "{{addWww}}"
+$Tags = ${COMMON_TAGS}
+
+# DNS Zones are global resources, but the resource group requires a location.
+New-AzResourceGroup -Name $RgName -Location $Location -Tag $Tags -Force
+
+Write-Host "Creating DNS Zone $ZoneName..."
+$zone = New-AzDnsZone -Name $ZoneName -ResourceGroupName $RgName -Tag $Tags
+
+if ($AddWww -eq 'Yes') {
+    Write-Host "Adding placeholder 'www' record..."
+    New-AzDnsRecordSet -Name "www" -RecordType A -ZoneName $ZoneName -ResourceGroupName $RgName -Ttl 3600 -DnsRecords (New-AzDnsRecordConfig -Ipv4Address "1.2.3.4") -Overwrite
+}
+
+Write-Host "DNS Zone Deployed."
+Write-Host "Update your registrar with these Name Servers:" -ForegroundColor Yellow
+$zone.NameServers`
+  },
 
   // --- DATABASE (COSMOS) ---
   {
     id: 'cosmos-sql',
     category: AzureCategory.DATABASE,
     title: 'Cosmos DB (NoSQL)',
-    description: 'Provisions a Cosmos DB account using the Core (SQL) API. It creates a database and a sample container with a predefined partition key. This setup is optimized for high-availability global applications requiring low-latency data access.',
+    description: 'Provisions a Cosmos DB account using the Core (SQL) API.',
     whatItDoes: [
-        "Creates Cosmos DB Account (Serverless/Provisioned)",
+        "Creates Cosmos DB Account",
         "Creates SQL Database",
         "Creates Container with Partition Key"
     ],
     limitations: [
-        "Does not configure Geo-Replication",
-        "Does not configure Private Link"
+        "Does not configure Geo-Replication"
     ],
     commonIssues: [
-        "Partition Key: The partition key ('/id' here) CANNOT be changed after creation. Choose wisely.",
-        "Cost Management: Default throughput is 400 RU/s. Auto-scale settings should be monitored to avoid bill shock."
+        "Partition Key: Cannot be changed after creation."
     ],
     inputs: [
       { id: 'rgSuffix', label: 'RG Suffix', type: 'text', defaultValue: 'data' },
@@ -1401,9 +1653,14 @@ Write-Host "NAT Gateway deployed and attached to 'default' subnet."`
     ],
     learnLinks: [{ title: 'Create Cosmos DB', url: 'https://learn.microsoft.com/en-us/azure/cosmos-db/nosql/manage-with-powershell' }],
     diagramCode: `graph LR
-    App -->|SDK| Cosmos[Cosmos DB Account]
-    Cosmos --> DB[Database]
-    DB --> Container[Container]`,
+    App[Existing App] -->|SDK| Cosmos[Cosmos DB Account]
+    subgraph "New Deployment: {{location}}"
+      Cosmos --> DB[Database]
+      DB --> Container[Container]
+    end
+    ${DIAGRAM_STYLES}
+    class App existing;
+    class Cosmos,DB,Container new;`,
     scriptTemplate: `# Cosmos DB Deployment
 ${BASE_RG}
 ${BASE_LOC}
@@ -1430,18 +1687,15 @@ Write-Host "Cosmos DB deployed."`
     id: 'redis-cache',
     category: AzureCategory.DATABASE,
     title: 'Azure Redis Cache',
-    description: 'Deploys a fully managed Azure Cache for Redis (Standard SKU). This acts as a distributed, in-memory data store for high-performance applications. The Standard SKU supports replication for reliability.',
+    description: 'Deploys a fully managed Azure Cache for Redis (Standard SKU).',
     whatItDoes: [
-        "Deploys Redis Cache Standard",
-        "Configures Non-SSL port (Disabled by default)"
+        "Deploys Redis Cache Standard"
     ],
     limitations: [
-        "Does not configure VNet Injection (requires Premium)",
-        "Does not configure persistence"
+        "Does not configure VNet Injection"
     ],
     commonIssues: [
-        "TLS Versions: Azure Redis enforces TLS 1.2 by default. Older clients may fail to connect.",
-        "VNet Injection: Standard SKU does not support VNet injection. Use Private Endpoints for secure access."
+        "TLS Versions: Enforces TLS 1.2 by default."
     ],
     inputs: [
       { id: 'rgSuffix', label: 'RG Suffix', type: 'text', defaultValue: 'cache' },
@@ -1450,8 +1704,13 @@ Write-Host "Cosmos DB deployed."`
     ],
     learnLinks: [{ title: 'Create Redis Cache', url: 'https://learn.microsoft.com/en-us/azure/azure-cache-for-redis/cache-how-to-manage-redis-cache-powershell' }],
     diagramCode: `graph LR
-    WebApp -->|Redis Protocol| Redis[Azure Redis Cache]
-    Redis --> Memory[In-Memory Store]`,
+    WebApp[Existing WebApp] -->|Redis Protocol| Redis[Azure Redis Cache]
+    subgraph "New Deployment: {{location}}"
+      Redis --> Memory[In-Memory Store]
+    end
+    ${DIAGRAM_STYLES}
+    class WebApp existing;
+    class Redis,Memory new;`,
     scriptTemplate: `# Redis Cache Deployment
 ${BASE_RG}
 ${BASE_LOC}
@@ -1474,18 +1733,16 @@ Write-Host "Redis Cache created."`
     id: 'acr-premium',
     category: AzureCategory.CONTAINERS,
     title: 'Azure Container Registry',
-    description: 'Creates a Premium Azure Container Registry (ACR). The Premium SKU is selected to support advanced features like Geo-replication, Content Trust, and Private Link, which are essential for enterprise container supply chains.',
+    description: 'Creates a Premium Azure Container Registry (ACR).',
     whatItDoes: [
         "Creates ACR Premium",
         "Enables Admin User"
     ],
     limitations: [
-        "Does not configure Content Trust",
-        "Does not configure Geo-replication zones"
+        "Does not configure Content Trust"
     ],
     commonIssues: [
-        "Docker Login: You must enable the Admin User (or use AAD tokens) to log in via 'docker login'.",
-        "Public Access: Premium registries are often locked down. Ensure public network access is allowed if pushing from a dev machine."
+        "Docker Login: Enable Admin User."
     ],
     inputs: [
       { id: 'rgSuffix', label: 'RG Suffix', type: 'text', defaultValue: 'acr' },
@@ -1493,9 +1750,14 @@ Write-Host "Redis Cache created."`
     ],
     learnLinks: [{ title: 'Create ACR', url: 'https://learn.microsoft.com/en-us/azure/container-registry/container-registry-get-started-powershell' }],
     diagramCode: `graph LR
-    DevOps -->|Push| ACR[Container Registry]
-    AKS -->|Pull| ACR
-    WebApp -->|Pull| ACR`,
+    DevOps[Existing Pipeline] -->|Push| ACR[Container Registry]
+    AKS[Existing AKS] -->|Pull| ACR
+    subgraph "New Deployment: {{location}}"
+      ACR
+    end
+    ${DIAGRAM_STYLES}
+    class DevOps,AKS existing;
+    class ACR new;`,
     scriptTemplate: `# Azure Container Registry
 ${BASE_RG}
 ${BASE_LOC}
@@ -1514,19 +1776,17 @@ Write-Host "ACR Created: $AcrName.azurecr.io"`
     id: 'logic-app-standard',
     category: AzureCategory.INTEGRATION,
     title: 'Logic App (Standard)',
-    description: 'Deploys a Standard-tier Logic App running on a Workflow Standard App Service Plan. Unlike Consumption, this SKU supports VNet Integration, Private Endpoints, and runs in a single-tenant environment, making it suitable for enterprise workloads requiring network isolation.',
+    description: 'Deploys a Standard-tier Logic App running on a Workflow Standard App Service Plan.',
     whatItDoes: [
         "Creates Workflow Standard App Service Plan",
-        "Creates Storage Account (Required for state)",
+        "Creates Storage Account",
         "Creates Logic App (Standard)"
     ],
     limitations: [
-        "Higher base cost than Consumption",
-        "Does not configure VNet Integration (script creates capability, needs subnet ID)"
+        "Does not configure VNet Integration"
     ],
     commonIssues: [
-        "State Storage: Requires a dedicated Storage Account. Do not share with other high-IO workloads.",
-        "Plan Sizing: WS1 is sufficient for most workloads. Scale up to WS2/3 for high memory requirements."
+        "State Storage: Requires dedicated Storage Account."
     ],
     inputs: [
       { id: 'rgSuffix', label: 'RG Suffix', type: 'text', defaultValue: 'int-std' },
@@ -1535,12 +1795,17 @@ Write-Host "ACR Created: $AcrName.azurecr.io"`
     ],
     learnLinks: [{ title: 'Logic Apps Standard vs Consumption', url: 'https://learn.microsoft.com/en-us/azure/logic-apps/logic-apps-overview#resource-type-and-host-environment-differences' }],
     diagramCode: `graph LR
-    Trigger[HTTP/Timer] --> Workflow[Logic App Std]
-    Workflow -->|VNet| SQL[Private SQL]
-    Workflow -->|Connector| SAP[SAP System]
-    subgraph "App Service Plan (WS1)"
-      Workflow
-    end`,
+    Trigger[External Trigger] --> Workflow[Logic App Std]
+    subgraph "New Deployment: {{location}}"
+      Workflow -->|VNet| SQL[Private SQL]
+      Workflow -->|Connector| SAP[SAP System]
+      subgraph "App Service Plan (WS1)"
+        Workflow
+      end
+    end
+    ${DIAGRAM_STYLES}
+    class Trigger,SQL,SAP existing;
+    class Workflow,SQL,SAP,Plan new;`,
     scriptTemplate: `# Logic App Standard
 $ErrorActionPreference = "Stop"
 ${BASE_RG}
@@ -1576,18 +1841,16 @@ Write-Host "Logic App Standard Deployed."`
     id: 'apim-standard',
     category: AzureCategory.INTEGRATION,
     title: 'API Management (Standard)',
-    description: 'Deploys an Azure API Management (APIM) instance. APIM acts as a facade for your backend services, providing rate limiting, authentication, IP filtering, and analytics. The Standard tier is production-ready.',
+    description: 'Deploys an Azure API Management (APIM) instance.',
     whatItDoes: [
         "Creates API Management Service",
         "Configures Publisher Email/Name"
     ],
     limitations: [
-        "Deployment takes 30-45 minutes",
-        "Does not configure APIs or Operations"
+        "Deployment takes 30-45 minutes"
     ],
     commonIssues: [
-        "Soft Delete: APIM instances have soft-delete enabled by default. If you delete and recreate with the same name, you must restore or purge.",
-        "Capacity: Scale units take time to provision."
+        "Soft Delete: APIM soft-delete enabled by default."
     ],
     inputs: [
       { id: 'rgSuffix', label: 'RG Suffix', type: 'text', defaultValue: 'api' },
@@ -1597,10 +1860,15 @@ Write-Host "Logic App Standard Deployed."`
     ],
     learnLinks: [{ title: 'Create API Management', url: 'https://learn.microsoft.com/en-us/azure/api-management/get-started-create-service-instance-powershell' }],
     diagramCode: `graph LR
-    Client[Mobile/Web] -->|HTTPS| APIM[API Management]
-    APIM -->|Policy| Auth[Oauth2]
-    APIM -->|Proxy| Func[Function App]
-    APIM -->|Proxy| K8s[AKS Service]`,
+    Client[Mobile/Web Client] -->|HTTPS| APIM[API Management]
+    subgraph "New Deployment: {{location}}"
+      APIM -->|Policy| Auth[Oauth2]
+      APIM -->|Proxy| Func[Function App]
+      APIM -->|Proxy| K8s[AKS Service]
+    end
+    ${DIAGRAM_STYLES}
+    class Client,Auth,Func,K8s existing;
+    class APIM new;`,
     scriptTemplate: `# API Management Deployment
 $ErrorActionPreference = "Stop"
 ${BASE_RG}
@@ -1624,19 +1892,17 @@ Write-Host "APIM Deployed."`
     id: 'service-bus-standard',
     category: AzureCategory.INTEGRATION,
     title: 'Service Bus Namespace',
-    description: 'Deploys a Service Bus Namespace (Standard SKU) with a sample Queue and Topic. Service Bus is a fully managed enterprise message broker with message queues and publish-subscribe topics, essential for decoupling applications.',
+    description: 'Deploys a Service Bus Namespace (Standard SKU) with a sample Queue and Topic.',
     whatItDoes: [
         "Creates Service Bus Namespace",
         "Creates 'orders' Queue",
         "Creates 'events' Topic"
     ],
     limitations: [
-        "Does not configure Authorization Rules (SAS)",
-        "Does not configure Geo-DR"
+        "Does not configure Authorization Rules"
     ],
     commonIssues: [
-        "SKU: Basic SKU does NOT support Topics, only Queues. Standard is required for Pub/Sub.",
-        "Networking: Service Bus uses port 5671 (AMQP). Ensure firewall outbound allows this."
+        "SKU: Basic SKU does NOT support Topics."
     ],
     inputs: [
       { id: 'rgSuffix', label: 'RG Suffix', type: 'text', defaultValue: 'bus' },
@@ -1644,10 +1910,15 @@ Write-Host "APIM Deployed."`
     ],
     learnLinks: [{ title: 'Create Service Bus Namespace', url: 'https://learn.microsoft.com/en-us/azure/service-bus-messaging/service-bus-quickstart-powershell' }],
     diagramCode: `graph LR
-    App1[Producer] -->|Send| SB[Service Bus]
-    SB -->|Queue| App2[Consumer A]
-    SB -->|Topic| App3[Consumer B]
-    SB -->|Topic| App4[Consumer C]`,
+    App1[Existing Producer] -->|Send| SB[Service Bus]
+    subgraph "New Deployment: {{location}}"
+      SB -->|Queue| App2[Consumer A]
+      SB -->|Topic| App3[Consumer B]
+      SB -->|Topic| App4[Consumer C]
+    end
+    ${DIAGRAM_STYLES}
+    class App1,App2,App3,App4 existing;
+    class SB new;`,
     scriptTemplate: `# Service Bus Deployment
 $ErrorActionPreference = "Stop"
 ${BASE_RG}
@@ -1667,5 +1938,90 @@ Write-Host "Creating Topic 'events'..."
 New-AzServiceBusTopic -ResourceGroupName $RgName -NamespaceName $SbName -Name "events"
 
 Write-Host "Service Bus Ready."`
+  },
+
+  // --- MONITORING (COST & LOGS) ---
+  {
+    id: 'monitor-cost-analytics',
+    category: AzureCategory.MONITORING,
+    title: 'Log Analytics & Cost Automation',
+    description: 'Deploys a Log Analytics Workspace and an Azure Automation Account. Includes a sample Runbook script scaffolded for cost analysis and tracking tasks.',
+    whatItDoes: [
+        "Creates Log Analytics Workspace",
+        "Creates Automation Account",
+        "Enables System Managed Identity",
+        "Deploys 'Analyze-Cost' Runbook"
+    ],
+    limitations: [
+        "Requires 'Cost Management Reader' role assignment (manual step)"
+    ],
+    commonIssues: [
+        "Modules: Ensure 'Az.Accounts' and 'Az.Billing' modules are added to Automation Account."
+    ],
+    inputs: [
+      { id: 'rgSuffix', label: 'RG Suffix', type: 'text', defaultValue: 'monitor' },
+      { id: 'workspaceName', label: 'Workspace Name', type: 'text', defaultValue: 'la-ops-01' },
+      { id: 'automationName', label: 'Automation Name', type: 'text', defaultValue: 'aa-ops-01' },
+      { id: 'retention', label: 'Log Retention (Days)', type: 'number', defaultValue: 30 }
+    ],
+    learnLinks: [{ title: 'Azure Automation Runbooks', url: 'https://learn.microsoft.com/en-us/azure/automation/automation-runbook-types' }],
+    diagramCode: `graph LR
+    Timer[Schedule] -->|Trigger| Runbook[Cost Analysis Runbook]
+    Runbook -->|Query| Azure[Azure Cost Mgmt]
+    Runbook -->|Log| LA[Log Analytics]
+    subgraph "New Deployment: {{location}}"
+      Runbook
+      LA
+    end
+    ${DIAGRAM_STYLES}
+    class Timer,Azure existing;
+    class Runbook,LA new;`,
+    scriptTemplate: `# Log Analytics & Cost Automation
+$ErrorActionPreference = "Stop"
+${BASE_RG}
+${BASE_LOC}
+$WorkspaceName = "{{workspaceName}}"
+$AutomationName = "{{automationName}}"
+$Retention = {{retention}}
+$Tags = ${COMMON_TAGS}
+
+New-AzResourceGroup -Name $RgName -Location $Location -Tag $Tags -Force
+
+Write-Host "Creating Log Analytics Workspace..."
+$la = New-AzOperationalInsightsWorkspace -ResourceGroupName $RgName -Name $WorkspaceName -Location $Location -Sku Standard -RetentionInDays $Retention -Tag $Tags
+
+Write-Host "Creating Automation Account..."
+$aa = New-AzAutomationAccount -ResourceGroupName $RgName -Name $AutomationName -Location $Location -Sku Basic -Tag $Tags
+$aa | Set-AzAutomationAccount -AssignSystemIdentity
+
+Write-Host "Creating Cost Analysis Runbook..."
+$scriptContent = @"
+<#
+.SYNOPSIS
+    Basic Cost Analysis Skeleton
+.DESCRIPTION
+    Connects via Managed Identity and queries scope usage.
+#>
+try {
+    Connect-AzAccount -Identity
+    Write-Output 'Logged in via Managed Identity.'
+    
+    # Placeholder for complex cost query logic
+    Write-Output 'Checking subscription costs...'
+    # \`$cost = Get-AzConsumptionUsageDetail ...
+    
+    Write-Output 'Cost analysis logic executed successfully.'
+} catch {
+    Write-Error 'Failed to execute cost analysis.'
+}
+"@
+
+$tmp = New-TemporaryFile
+Set-Content -Path $tmp -Value $scriptContent
+Import-AzAutomationRunbook -ResourceGroupName $RgName -AutomationAccountName $AutomationName -Name "Analyze-Cost" -Path $tmp -Type PowerShell -Force
+Remove-Item $tmp
+
+Write-Host "Deployment Complete."
+Write-Host "IMPORTANT: Grant the Automation Account's Managed Identity 'Cost Management Reader' access on your subscription." -ForegroundColor Yellow`
   }
 ];
