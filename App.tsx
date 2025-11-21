@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import Generator from './components/Generator';
@@ -67,15 +66,15 @@ const App: React.FC = () => {
       if (!projectState.name) {
           // Default project name
           const defaultName = `${globalVars.projectPrefix}-deployment`;
-          const name = window.prompt("Enter a name for this deployment project:", defaultName);
+          const inputName = window.prompt("Enter a name for this deployment project:", defaultName);
           
-          if (name) {
-              setProjectState(prev => ({
-                  name,
-                  items: [...prev.items, item]
-              }));
-          }
-          // If they cancel, we don't save the item
+          // Use default if user cancelled or entered empty string to ensure item is added
+          const name = inputName && inputName.trim() !== "" ? inputName : defaultName;
+          
+          setProjectState(prev => ({
+              name,
+              items: [...prev.items, item]
+          }));
       } else {
           setProjectState(prev => ({
               ...prev,

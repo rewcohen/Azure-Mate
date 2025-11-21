@@ -37,7 +37,7 @@ const EndStateDeployment: React.FC<EndStateDeploymentProps> = ({ project, onRemo
   }, 0);
 
   // Aggregate costs by Resource Name to create a BOM (Bill of Materials)
-  const aggregatedCosts = project.items.reduce((acc: Record<string, { count: number; total: number }>, item) => {
+  const aggregatedCosts = project.items.reduce((acc, item) => {
     if (item.costEstimate?.items) {
         item.costEstimate.items.forEach(costItem => {
             const key = costItem.resourceName;
@@ -109,8 +109,8 @@ const EndStateDeployment: React.FC<EndStateDeploymentProps> = ({ project, onRemo
                                 <div className="text-xs text-slate-400 mb-2">
                                    Estimated Cost: <span className="text-emerald-400">{formatCurrency(item.costEstimate?.totalMonthly || 0)}</span>
                                 </div>
-                                {/* Deployment Tips extracted */}
-                                {item.deploymentTips.length > 0 && (
+                                {/* Deployment Tips extracted - safe check added */}
+                                {item.deploymentTips && item.deploymentTips.length > 0 && (
                                     <div className="mt-3 p-2 bg-blue-950/30 rounded border border-blue-900/30">
                                         <p className="text-[10px] font-bold text-blue-400 flex items-center gap-1 mb-1">
                                             <Lightbulb className="w-3 h-3" /> Deployment Tip
@@ -263,12 +263,15 @@ const EndStateDeployment: React.FC<EndStateDeploymentProps> = ({ project, onRemo
                  <div className="mb-6">
                      <h5 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Bill of Materials (Aggregated)</h5>
                      <div className="space-y-2">
-                         {Object.entries(aggregatedCosts).map(([name, data]) => (
-                             <div key={name} className="flex justify-between items-center text-sm">
-                                 <span className="text-slate-300 truncate mr-2">{name} <span className="text-slate-600 text-xs">x{data.count}</span></span>
-                                 <span className="font-mono text-slate-400">{formatCurrency(data.total)}</span>
-                             </div>
-                         ))}
+                         {Object.entries(aggregatedCosts).map(([name, dataRaw]) => {
+                             const data = dataRaw as { count: number; total: number };
+                             return (
+                                 <div key={name} className="flex justify-between items-center text-sm">
+                                     <span className="text-slate-300 truncate mr-2">{name} <span className="text-slate-600 text-xs">x{data.count}</span></span>
+                                     <span className="font-mono text-slate-400">{formatCurrency(data.total)}</span>
+                                 </div>
+                             );
+                         })}
                      </div>
                  </div>
 

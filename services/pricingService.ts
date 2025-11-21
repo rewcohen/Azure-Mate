@@ -1,12 +1,3 @@
-
-
-
-
-
-
-
-
-
 import { CostBreakdown, CostItem } from "../types";
 
 /**
@@ -89,6 +80,48 @@ const PRICING_CATALOG: Record<string, number> = {
     'APIM (Premium)': 2795.00,
     'Service Bus (Standard Base)': 10.00, // Base charge
     'Service Bus (Ops 1M)': 0.05,
+};
+
+/**
+ * Updates the pricing catalog using the Azure Retail Prices API.
+ * Note: This uses the public unauthenticated endpoint.
+ * Returns the number of items updated.
+ */
+export const updateLivePricing = async (): Promise<number> => {
+    // Using the specific API filter requested
+    const url = "https://prices.azure.com/api/retail/prices?$filter=serviceName eq 'Virtual Machines'";
+    
+    try {
+        const response = await fetch(url);
+        
+        if (!response.ok) {
+            throw new Error(`Azure API Error: ${response.status} ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        let updatedCount = 0;
+
+        if (data.Items && Array.isArray(data.Items)) {
+            data.Items.forEach((item: any) => {
+                // We attempt to match API items to our simplified catalog keys
+                // API item example: { armSkuName: "Standard_D2s_v3", unitPrice: 0.096, ... }
+                
+                if (item.armSkuName && PRICING_CATALOG.hasOwnProperty(item.armSkuName)) {
+                    // The API typically returns unitPrice per Hour for VMs
+                    if (typeof item.unitPrice === 'number') {
+                        // Update catalog with monthly estimate (730 hours)
+                        PRICING_CATALOG[item.armSkuName] = item.unitPrice * 730;
+                        updatedCount++;
+                    }
+                }
+            });
+        }
+        
+        return updatedCount;
+    } catch (error) {
+        console.error("Failed to fetch live pricing:", error);
+        throw error;
+    }
 };
 
 /**
