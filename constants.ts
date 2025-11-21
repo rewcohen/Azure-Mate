@@ -63,43 +63,62 @@ $AdminUser = "{{adminUser}}"
 $Tags = ${COMMON_TAGS}
 $ProximityGroup = "{{proximityPlacementGroup}}"
 
-Write-Host "Creating Resource Group $RgName..." -ForegroundColor Cyan
-New-AzResourceGroup -Name $RgName -Location $Location -Tag $Tags -Force
+try {
+    Write-Host "Creating Resource Group $RgName..." -ForegroundColor Cyan
+    New-AzResourceGroup -Name $RgName -Location $Location -Tag $Tags -Force
+} catch {
+    Write-Error "Failed to create Resource Group: $_"
+    exit
+}
 
 # PPG Handling
 $ppgId = $null
 if (-not [string]::IsNullOrWhiteSpace($ProximityGroup)) {
-    Write-Host "Checking Proximity Placement Group: $ProximityGroup"
-    $ppg = Get-AzProximityPlacementGroup -Name $ProximityGroup -ResourceGroupName $RgName -ErrorAction SilentlyContinue
-    if ($null -eq $ppg) {
-        Write-Host "Creating new PPG..."
-        $ppg = New-AzProximityPlacementGroup -Name $ProximityGroup -ResourceGroupName $RgName -Location $Location -ProximityPlacementGroupType Standard
+    try {
+        Write-Host "Checking Proximity Placement Group: $ProximityGroup"
+        $ppg = Get-AzProximityPlacementGroup -Name $ProximityGroup -ResourceGroupName $RgName -ErrorAction SilentlyContinue
+        if ($null -eq $ppg) {
+            Write-Host "Creating new PPG..."
+            $ppg = New-AzProximityPlacementGroup -Name $ProximityGroup -ResourceGroupName $RgName -Location $Location -ProximityPlacementGroupType Standard
+        }
+        $ppgId = $ppg.Id
+    } catch {
+        Write-Warning "Failed to configure PPG, proceeding without it: $_"
     }
-    $ppgId = $ppg.Id
 }
 
-Write-Host "Creating Networking..."
-$vnet = New-AzVirtualNetwork -ResourceGroupName $RgName -Location $Location -Name "$VmName-vnet" -AddressPrefix "10.0.0.0/16"
-$nsg = New-AzNetworkSecurityGroup -ResourceGroupName $RgName -Location $Location -Name "$VmName-nsg"
-$subnet = Add-AzVirtualNetworkSubnetConfig -Name "default" -AddressPrefix "10.0.1.0/24" -NetworkSecurityGroup $nsg -VirtualNetwork $vnet
-$vnet | Set-AzVirtualNetwork
+try {
+    Write-Host "Creating Networking..."
+    $vnet = New-AzVirtualNetwork -ResourceGroupName $RgName -Location $Location -Name "$VmName-vnet" -AddressPrefix "10.0.0.0/16"
+    $nsg = New-AzNetworkSecurityGroup -ResourceGroupName $RgName -Location $Location -Name "$VmName-nsg"
+    $subnet = Add-AzVirtualNetworkSubnetConfig -Name "default" -AddressPrefix "10.0.1.0/24" -NetworkSecurityGroup $nsg -VirtualNetwork $vnet
+    $vnet | Set-AzVirtualNetwork
 
-$pip = New-AzPublicIpAddress -ResourceGroupName $RgName -Location $Location -Name "$VmName-pip" -AllocationMethod Static -Sku Standard
-$nic = New-AzNetworkInterface -ResourceGroupName $RgName -Location $Location -Name "$VmName-nic" -SubnetId $subnet.Id -PublicIpAddressId $pip.Id
-
-Write-Host "Creating VM Config..."
-$vmConfig = New-AzVMConfig -VMName $VmName -VMSize $VmSize |
-    Set-AzVMOperatingSystem -Linux -ComputerName $VmName -Credential (Get-Credential) |
-    Set-AzVMSourceImage -PublisherName "Canonical" -Offer "0001-com-ubuntu-server-jammy" -Skus "22_04-lts" -Version "latest" |
-    Add-AzVMNetworkInterface -Id $nic.Id |
-    Assign-AzUserAssignedIdentity -Identity "/subscriptions/{{subscriptionId}}/resourcegroups/$RgName/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-$VmName"
-
-if ($ppgId) {
-    $vmConfig = Set-AzVMProximityPlacementGroup -VMConfig $vmConfig -Id $ppgId
+    $pip = New-AzPublicIpAddress -ResourceGroupName $RgName -Location $Location -Name "$VmName-pip" -AllocationMethod Static -Sku Standard
+    $nic = New-AzNetworkInterface -ResourceGroupName $RgName -Location $Location -Name "$VmName-nic" -SubnetId $subnet.Id -PublicIpAddressId $pip.Id
+} catch {
+    Write-Error "Failed to create networking components: $_"
+    exit
 }
 
-New-AzVM -ResourceGroupName $RgName -Location $Location -VM $vmConfig -Tag $Tags
-Write-Host "Done." -ForegroundColor Green`
+try {
+    Write-Host "Creating VM Config..."
+    $vmConfig = New-AzVMConfig -VMName $VmName -VMSize $VmSize |
+        Set-AzVMOperatingSystem -Linux -ComputerName $VmName -Credential (Get-Credential) |
+        Set-AzVMSourceImage -PublisherName "Canonical" -Offer "0001-com-ubuntu-server-jammy" -Skus "22_04-lts" -Version "latest" |
+        Add-AzVMNetworkInterface -Id $nic.Id |
+        Assign-AzUserAssignedIdentity -Identity "/subscriptions/{{subscriptionId}}/resourcegroups/$RgName/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-$VmName"
+
+    if ($ppgId) {
+        $vmConfig = Set-AzVMProximityPlacementGroup -VMConfig $vmConfig -Id $ppgId
+    }
+
+    New-AzVM -ResourceGroupName $RgName -Location $Location -VM $vmConfig -Tag $Tags
+    Write-Host "Done." -ForegroundColor Green
+} catch {
+    Write-Error "Failed to create VM: $_"
+    exit
+}`
   },
 
   // --- COMPUTE (WINDOWS) ---
@@ -147,39 +166,54 @@ $AdminUser = "{{adminUser}}"
 $AllowedIp = "{{allowedIp}}"
 $Tags = ${COMMON_TAGS}
 
-New-AzResourceGroup -Name $RgName -Location $Location -Tag $Tags -Force
-
-Write-Host "Creating Secure Network..."
-$vnet = New-AzVirtualNetwork -ResourceGroupName $RgName -Location $Location -Name "$VmName-vnet" -AddressPrefix "10.0.0.0/16"
-$nsg = New-AzNetworkSecurityGroup -ResourceGroupName $RgName -Location $Location -Name "$VmName-nsg"
-
-# Add Safe RDP Rule
-if (-not [string]::IsNullOrWhiteSpace($AllowedIp)) {
-    $nsg | Add-AzNetworkSecurityRuleConfig -Name "AllowAdminRDP" -Description "Allow RDP from Admin IP" -Access Allow ` +
-    `-Protocol Tcp -Direction Inbound -Priority 100 -SourceAddressPrefix $AllowedIp -SourcePortRange * ` +
-    `-DestinationAddressPrefix * -DestinationPortRange 3389 | Set-AzNetworkSecurityGroup
-} else {
-    Write-Warning "No Allowed IP provided. RDP port will not be opened via NSG (locked down)."
+try {
+    New-AzResourceGroup -Name $RgName -Location $Location -Tag $Tags -Force
+} catch {
+    Write-Error "Failed to create RG: $_"
+    exit
 }
 
-$subnet = Add-AzVirtualNetworkSubnetConfig -Name "default" -AddressPrefix "10.0.1.0/24" -NetworkSecurityGroup $nsg -VirtualNetwork $vnet
-$vnet | Set-AzVirtualNetwork
+try {
+    Write-Host "Creating Secure Network..."
+    $vnet = New-AzVirtualNetwork -ResourceGroupName $RgName -Location $Location -Name "$VmName-vnet" -AddressPrefix "10.0.0.0/16"
+    $nsg = New-AzNetworkSecurityGroup -ResourceGroupName $RgName -Location $Location -Name "$VmName-nsg"
 
-$pip = New-AzPublicIpAddress -ResourceGroupName $RgName -Location $Location -Name "$VmName-pip" -AllocationMethod Static -Sku Standard
-$nic = New-AzNetworkInterface -ResourceGroupName $RgName -Location $Location -Name "$VmName-nic" -SubnetId $subnet.Id -PublicIpAddressId $pip.Id
+    # Add Safe RDP Rule
+    if (-not [string]::IsNullOrWhiteSpace($AllowedIp)) {
+        $nsg | Add-AzNetworkSecurityRuleConfig -Name "AllowAdminRDP" -Description "Allow RDP from Admin IP" -Access Allow ` +
+        `-Protocol Tcp -Direction Inbound -Priority 100 -SourceAddressPrefix $AllowedIp -SourcePortRange * ` +
+        `-DestinationAddressPrefix * -DestinationPortRange 3389 | Set-AzNetworkSecurityGroup
+    } else {
+        Write-Warning "No Allowed IP provided. RDP port will not be opened via NSG (locked down)."
+    }
 
-Write-Host "Creating VM Config..."
-$cred = Get-Credential -Message "Enter VM Admin Password"
+    $subnet = Add-AzVirtualNetworkSubnetConfig -Name "default" -AddressPrefix "10.0.1.0/24" -NetworkSecurityGroup $nsg -VirtualNetwork $vnet
+    $vnet | Set-AzVirtualNetwork
 
-$vmConfig = New-AzVMConfig -VMName $VmName -VMSize $VmSize |
-    Set-AzVMOperatingSystem -Windows -ComputerName $VmName -Credential $cred |
-    Set-AzVMSourceImage -PublisherName "MicrosoftWindowsServer" -Offer "WindowsServer" -Skus "2022-Datacenter" -Version "latest" |
-    Add-AzVMNetworkInterface -Id $nic.Id |
-    Assign-AzSystemAssignedIdentity
+    $pip = New-AzPublicIpAddress -ResourceGroupName $RgName -Location $Location -Name "$VmName-pip" -AllocationMethod Static -Sku Standard
+    $nic = New-AzNetworkInterface -ResourceGroupName $RgName -Location $Location -Name "$VmName-nic" -SubnetId $subnet.Id -PublicIpAddressId $pip.Id
+} catch {
+    Write-Error "Networking creation failed: $_"
+    exit
+}
 
-New-AzVM -ResourceGroupName $RgName -Location $Location -VM $vmConfig -Tag $Tags
+try {
+    Write-Host "Creating VM Config..."
+    $cred = Get-Credential -Message "Enter VM Admin Password"
 
-Write-Host "Windows VM Deployed. Connect via RDP to $($pip.IpAddress)"`
+    $vmConfig = New-AzVMConfig -VMName $VmName -VMSize $VmSize |
+        Set-AzVMOperatingSystem -Windows -ComputerName $VmName -Credential $cred |
+        Set-AzVMSourceImage -PublisherName "MicrosoftWindowsServer" -Offer "WindowsServer" -Skus "2022-Datacenter" -Version "latest" |
+        Add-AzVMNetworkInterface -Id $nic.Id |
+        Assign-AzSystemAssignedIdentity
+
+    New-AzVM -ResourceGroupName $RgName -Location $Location -VM $vmConfig -Tag $Tags
+
+    Write-Host "Windows VM Deployed. Connect via RDP to $($pip.IpAddress)"
+} catch {
+    Write-Error "VM Deployment failed: $_"
+    exit
+}`
   },
 
   // --- COMPUTE (VMSS) ---
@@ -229,38 +263,58 @@ $MinCount = {{minCount}}
 $MaxCount = {{maxCount}}
 $Tags = ${COMMON_TAGS}
 
-New-AzResourceGroup -Name $RgName -Location $Location -Tag $Tags -Force
+try {
+    New-AzResourceGroup -Name $RgName -Location $Location -Tag $Tags -Force
+} catch {
+    Write-Error "RG Creation failed: $_"
+    exit
+}
 
-# Networking
-$vnet = New-AzVirtualNetwork -ResourceGroupName $RgName -Name "$VmssName-vnet" -Location $Location -AddressPrefix "10.0.0.0/16"
-$sub = Add-AzVirtualNetworkSubnetConfig -Name "default" -AddressPrefix "10.0.1.0/24" -VirtualNetwork $vnet
-$vnet | Set-AzVirtualNetwork
+try {
+    # Networking
+    $vnet = New-AzVirtualNetwork -ResourceGroupName $RgName -Name "$VmssName-vnet" -Location $Location -AddressPrefix "10.0.0.0/16"
+    $sub = Add-AzVirtualNetworkSubnetConfig -Name "default" -AddressPrefix "10.0.1.0/24" -VirtualNetwork $vnet
+    $vnet | Set-AzVirtualNetwork
 
-# Load Balancer
-$pip = New-AzPublicIpAddress -ResourceGroupName $RgName -Name "$VmssName-lb-pip" -Location $Location -AllocationMethod Static -Sku Standard
-$frontend = New-AzLoadBalancerFrontendIpConfig -Name "frontend" -PublicIpAddress $pip
-$backend = New-AzLoadBalancerBackendAddressPoolConfig -Name "backend"
-$lb = New-AzLoadBalancer -ResourceGroupName $RgName -Name "$VmssName-lb" -Location $Location -Sku Standard -FrontendIpConfiguration $frontend -BackendAddressPool $backend
+    # Load Balancer
+    $pip = New-AzPublicIpAddress -ResourceGroupName $RgName -Name "$VmssName-lb-pip" -Location $Location -AllocationMethod Static -Sku Standard
+    $frontend = New-AzLoadBalancerFrontendIpConfig -Name "frontend" -PublicIpAddress $pip
+    $backend = New-AzLoadBalancerBackendAddressPoolConfig -Name "backend"
+    $lb = New-AzLoadBalancer -ResourceGroupName $RgName -Name "$VmssName-lb" -Location $Location -Sku Standard -FrontendIpConfiguration $frontend -BackendAddressPool $backend
+} catch {
+    Write-Error "Networking/LB failed: $_"
+    exit
+}
 
-# VMSS
-Write-Host "Creating VM Scale Set..."
-$ipConfig = New-AzVmssIpConfig -Name "ipconfig" -LoadBalancerBackendAddressPoolsId $lb.BackendAddressPools[0].Id -SubnetId $sub.Id
-$config = New-AzVmssConfig -Location $Location -SkuCapacity $MinCount -SkuName $VmSize -UpgradePolicyMode Automatic |
-    Add-AzVmssNetworkInterfaceConfiguration -Name "nic" -Primary $true -IpConfiguration $ipConfig |
-    Set-AzVmssOsProfile -ComputerNamePrefix "vmss" -AdminUsername "azureuser" -AdminPassword "SecurePassword123!" -LinuxConfiguration (New-AzVmssLinuxConfiguration -DisablePasswordAuthentication $false) |
-    Set-AzVmssStorageProfile -ImageReferencePublisher "Canonical" -ImageReferenceOffer "0001-com-ubuntu-server-jammy" -ImageReferenceSku "22_04-lts" -ImageReferenceVersion "latest"
+try {
+    # VMSS
+    Write-Host "Creating VM Scale Set..."
+    $ipConfig = New-AzVmssIpConfig -Name "ipconfig" -LoadBalancerBackendAddressPoolsId $lb.BackendAddressPools[0].Id -SubnetId $sub.Id
+    $config = New-AzVmssConfig -Location $Location -SkuCapacity $MinCount -SkuName $VmSize -UpgradePolicyMode Automatic |
+        Add-AzVmssNetworkInterfaceConfiguration -Name "nic" -Primary $true -IpConfiguration $ipConfig |
+        Set-AzVmssOsProfile -ComputerNamePrefix "vmss" -AdminUsername "azureuser" -AdminPassword "SecurePassword123!" -LinuxConfiguration (New-AzVmssLinuxConfiguration -DisablePasswordAuthentication $false) |
+        Set-AzVmssStorageProfile -ImageReferencePublisher "Canonical" -ImageReferenceOffer "0001-com-ubuntu-server-jammy" -ImageReferenceSku "22_04-lts" -ImageReferenceVersion "latest"
 
-New-AzVmss -ResourceGroupName $RgName -Name $VmssName -VirtualMachineScaleSet $config -Tag $Tags
+    New-AzVmss -ResourceGroupName $RgName -Name $VmssName -VirtualMachineScaleSet $config -Tag $Tags
+} catch {
+    Write-Error "VMSS Creation failed: $_"
+    exit
+}
 
-# Autoscale
-Write-Host "Configuring Autoscale..."
-$ruleScaleOut = New-AzAutoscaleRule -MetricName "Percentage CPU" -MetricResourceId (Get-AzVmss -ResourceGroupName $RgName -Name $VmssName).Id -Operator GreaterThan -MetricStatistic Average -Threshold 75 -TimeGrain "00:01:00" -ScaleActionDirection Increase -ScaleActionType ChangeCount -ScaleActionValue 1 -Cooldown "00:05:00"
-$ruleScaleIn = New-AzAutoscaleRule -MetricName "Percentage CPU" -MetricResourceId (Get-AzVmss -ResourceGroupName $RgName -Name $VmssName).Id -Operator LessThan -MetricStatistic Average -Threshold 25 -TimeGrain "00:01:00" -ScaleActionDirection Decrease -ScaleActionType ChangeCount -ScaleActionValue 1 -Cooldown "00:05:00"
+try {
+    # Autoscale
+    Write-Host "Configuring Autoscale..."
+    $ruleScaleOut = New-AzAutoscaleRule -MetricName "Percentage CPU" -MetricResourceId (Get-AzVmss -ResourceGroupName $RgName -Name $VmssName).Id -Operator GreaterThan -MetricStatistic Average -Threshold 75 -TimeGrain "00:01:00" -ScaleActionDirection Increase -ScaleActionType ChangeCount -ScaleActionValue 1 -Cooldown "00:05:00"
+    $ruleScaleIn = New-AzAutoscaleRule -MetricName "Percentage CPU" -MetricResourceId (Get-AzVmss -ResourceGroupName $RgName -Name $VmssName).Id -Operator LessThan -MetricStatistic Average -Threshold 25 -TimeGrain "00:01:00" -ScaleActionDirection Decrease -ScaleActionType ChangeCount -ScaleActionValue 1 -Cooldown "00:05:00"
 
-$profile = New-AzAutoscaleProfile -Name "DefaultProfile" -CapacityMin $MinCount -CapacityMax $MaxCount -CapacityDefault $MinCount -Rule $ruleScaleOut,$ruleScaleIn
-New-AzAutoscaleSetting -ResourceGroupName $RgName -Name "$VmssName-autoscale" -TargetResourceId (Get-AzVmss -ResourceGroupName $RgName -Name $VmssName).Id -AutoscaleProfile $profile -Location $Location
+    $profile = New-AzAutoscaleProfile -Name "DefaultProfile" -CapacityMin $MinCount -CapacityMax $MaxCount -CapacityDefault $MinCount -Rule $ruleScaleOut,$ruleScaleIn
+    New-AzAutoscaleSetting -ResourceGroupName $RgName -Name "$VmssName-autoscale" -TargetResourceId (Get-AzVmss -ResourceGroupName $RgName -Name $VmssName).Id -AutoscaleProfile $profile -Location $Location
 
-Write-Host "VMSS Deployed with Autoscale."`
+    Write-Host "VMSS Deployed with Autoscale."
+} catch {
+    Write-Error "Autoscale configuration failed: $_"
+}
+`
   },
 
   // --- COMPUTE (SPOT VM) ---
@@ -303,26 +357,41 @@ $VmName = "{{vmName}}"
 $VmSize = "{{vmSize}}"
 $Tags = ${COMMON_TAGS}
 
-New-AzResourceGroup -Name $RgName -Location $Location -Tag $Tags -Force
+try {
+    New-AzResourceGroup -Name $RgName -Location $Location -Tag $Tags -Force
+} catch {
+    Write-Error "Failed to create RG: $_"
+    exit
+}
 
-# Network
-$vnet = New-AzVirtualNetwork -ResourceGroupName $RgName -Location $Location -Name "$VmName-vnet" -AddressPrefix "10.10.0.0/16"
-$sub = Add-AzVirtualNetworkSubnetConfig -Name "default" -AddressPrefix "10.10.1.0/24" -VirtualNetwork $vnet
-$vnet | Set-AzVirtualNetwork
-$pip = New-AzPublicIpAddress -ResourceGroupName $RgName -Location $Location -Name "$VmName-pip" -Sku Standard -AllocationMethod Static
-$nic = New-AzNetworkInterface -ResourceGroupName $RgName -Location $Location -Name "$VmName-nic" -SubnetId $sub.Id -PublicIpAddressId $pip.Id
+try {
+    # Network
+    $vnet = New-AzVirtualNetwork -ResourceGroupName $RgName -Location $Location -Name "$VmName-vnet" -AddressPrefix "10.10.0.0/16"
+    $sub = Add-AzVirtualNetworkSubnetConfig -Name "default" -AddressPrefix "10.10.1.0/24" -VirtualNetwork $vnet
+    $vnet | Set-AzVirtualNetwork
+    $pip = New-AzPublicIpAddress -ResourceGroupName $RgName -Location $Location -Name "$VmName-pip" -Sku Standard -AllocationMethod Static
+    $nic = New-AzNetworkInterface -ResourceGroupName $RgName -Location $Location -Name "$VmName-nic" -SubnetId $sub.Id -PublicIpAddressId $pip.Id
+} catch {
+    Write-Error "Networking setup failed: $_"
+    exit
+}
 
-# VM Config (Spot)
-$vmConfig = New-AzVMConfig -VMName $VmName -VMSize $VmSize |
-    Set-AzVMOperatingSystem -Linux -ComputerName $VmName -Credential (Get-Credential) |
-    Set-AzVMSourceImage -PublisherName "Canonical" -Offer "0001-com-ubuntu-server-jammy" -Skus "22_04-lts" -Version "latest" |
-    Add-AzVMNetworkInterface -Id $nic.Id |
-    Set-AzVMQPriority -Priority "Spot" -MaxPrice -1 -EvictionPolicy "Deallocate"
+try {
+    # VM Config (Spot)
+    $vmConfig = New-AzVMConfig -VMName $VmName -VMSize $VmSize |
+        Set-AzVMOperatingSystem -Linux -ComputerName $VmName -Credential (Get-Credential) |
+        Set-AzVMSourceImage -PublisherName "Canonical" -Offer "0001-com-ubuntu-server-jammy" -Skus "22_04-lts" -Version "latest" |
+        Add-AzVMNetworkInterface -Id $nic.Id |
+        Set-AzVMQPriority -Priority "Spot" -MaxPrice -1 -EvictionPolicy "Deallocate"
 
-Write-Host "Deploying Spot VM ($VmSize)..."
-New-AzVM -ResourceGroupName $RgName -Location $Location -VM $vmConfig -Tag $Tags
+    Write-Host "Deploying Spot VM ($VmSize)..."
+    New-AzVM -ResourceGroupName $RgName -Location $Location -VM $vmConfig -Tag $Tags
 
-Write-Host "Spot VM created."`
+    Write-Host "Spot VM created."
+} catch {
+    Write-Error "Spot VM deployment failed: $_"
+    exit
+}`
   },
   
   // --- COMPUTE (AVD) ---
@@ -375,30 +444,40 @@ $LbType = "{{lbType}}"
 $DagName = "$HpName-dag"
 $Tags = ${COMMON_TAGS}
 
-New-AzResourceGroup -Name $RgName -Location $Location -Tag $Tags -Force
+try {
+    New-AzResourceGroup -Name $RgName -Location $Location -Tag $Tags -Force
+} catch {
+    Write-Error "RG creation failed: $_"
+    exit
+}
 
-Write-Host "Creating Host Pool ($LbType)..."
-# Creating a Pooled Host Pool
-$hp = New-AzWvdHostPool -ResourceGroupName $RgName -Name $HpName -Location $Location ` +
-`-HostPoolType Pooled -LoadBalancerType $LbType -PreferredAppGroupType Desktop -Tag $Tags
+try {
+    Write-Host "Creating Host Pool ($LbType)..."
+    # Creating a Pooled Host Pool
+    $hp = New-AzWvdHostPool -ResourceGroupName $RgName -Name $HpName -Location $Location ` +
+    `-HostPoolType Pooled -LoadBalancerType $LbType -PreferredAppGroupType Desktop -Tag $Tags
 
-Write-Host "Creating Desktop Application Group..."
-$dag = New-AzWvdApplicationGroup -ResourceGroupName $RgName -Name $DagName -Location $Location ` +
-`-HostPoolArmPath $hp.Id -ApplicationGroupType Desktop -FriendlyName "Default Desktop" -Tag $Tags
+    Write-Host "Creating Desktop Application Group..."
+    $dag = New-AzWvdApplicationGroup -ResourceGroupName $RgName -Name $DagName -Location $Location ` +
+    `-HostPoolArmPath $hp.Id -ApplicationGroupType Desktop -FriendlyName "Default Desktop" -Tag $Tags
 
-Write-Host "Creating Workspace..."
-$ws = New-AzWvdWorkspace -ResourceGroupName $RgName -Name $WsName -Location $Location -Tag $Tags
+    Write-Host "Creating Workspace..."
+    $ws = New-AzWvdWorkspace -ResourceGroupName $RgName -Name $WsName -Location $Location -Tag $Tags
 
-Write-Host "Registering App Group to Workspace..."
-Register-AzWvdApplicationGroup -ResourceGroupName $RgName -WorkspaceName $WsName -ApplicationGroupPath $dag.Id
+    Write-Host "Registering App Group to Workspace..."
+    Register-AzWvdApplicationGroup -ResourceGroupName $RgName -WorkspaceName $WsName -ApplicationGroupPath $dag.Id
 
-Write-Host "Generating Host Registration Token (Valid 24h)..."
-$token = New-AzWvdRegistrationInfo -ResourceGroupName $RgName -HostPoolName $HpName -ExpirationTime ((Get-Date).ToUniversalTime().AddHours(24).ToString('yyyy-MM-ddTHH:mm:ss.fffffffZ'))
+    Write-Host "Generating Host Registration Token (Valid 24h)..."
+    $token = New-AzWvdRegistrationInfo -ResourceGroupName $RgName -HostPoolName $HpName -ExpirationTime ((Get-Date).ToUniversalTime().AddHours(24).ToString('yyyy-MM-ddTHH:mm:ss.fffffffZ'))
 
-Write-Host "AVD Environment Ready."
-Write-Host "Host Pool ID: $($hp.Id)"
-Write-Host "Registration Token: $($token.Token)" -ForegroundColor Yellow
-Write-Host "Use this token when deploying Session Host VMs."`
+    Write-Host "AVD Environment Ready."
+    Write-Host "Host Pool ID: $($hp.Id)"
+    Write-Host "Registration Token: $($token.Token)" -ForegroundColor Yellow
+    Write-Host "Use this token when deploying Session Host VMs."
+} catch {
+    Write-Error "AVD Deployment failed: $_"
+    exit
+}`
   },
 
   // --- CONTAINERS (AKS) ---

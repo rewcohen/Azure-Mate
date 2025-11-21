@@ -105,11 +105,20 @@ const App: React.FC = () => {
 
   const handleStartOver = () => {
     if (window.confirm("⚠️ Start Over?\n\nThis will erase your entire Project Plan (End-State) and reset Global Variables to defaults.\n\nAre you sure you want to proceed?")) {
-        setProjectState({ name: '', items: [] });
-        setGlobalVars(DEFAULT_GLOBAL_VARS);
-        setActiveScenario(null);
-        setCurrentView(ViewState.CATALOG);
-        setCurrentCategory(null);
+        // Use setTimeout to allow the confirm dialog to fully close before triggering state updates.
+        // This prevents race conditions where the UI update is blocked by the synchronous prompt.
+        setTimeout(() => {
+            // Explicitly clear storage
+            localStorage.removeItem('azureMate_projectState');
+            localStorage.removeItem('azureMate_globalVars');
+
+            // Reset all state to defaults
+            setProjectState({ name: '', items: [] });
+            setGlobalVars({ ...DEFAULT_GLOBAL_VARS });
+            setActiveScenario(null);
+            setCurrentCategory(null);
+            setCurrentView(ViewState.CATALOG);
+        }, 50);
     }
   };
 

@@ -271,8 +271,14 @@ const Sidebar: React.FC<SidebarProps> = ({
       {/* Start Over Button */}
       <div className="px-4 py-3 border-t border-slate-800 bg-slate-900/20">
           <button 
-            onClick={onStartOver}
-            className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-xs font-bold text-red-400 hover:bg-red-950/30 hover:text-red-300 transition-all border border-transparent hover:border-red-900/50 group"
+            type="button"
+            onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onStartOver();
+            }}
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-xs font-bold text-red-400 hover:bg-red-950/30 hover:text-red-300 transition-all border border-transparent hover:border-red-900/50 group cursor-pointer"
+            title="Reset all application state and data"
           >
             <Trash2 className="w-4 h-4 group-hover:animate-bounce" />
             Start Over
