@@ -109,7 +109,7 @@ const VariablesPage: React.FC<VariablesPageProps> = ({ config, onSave, onNavigat
                             value={formData.projectPrefix}
                             onChange={(e) => handleChange('projectPrefix', e.target.value)}
                             className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:outline-none"
-                            placeholder="e.g., contoso"
+                            placeholder="e.g., myproject"
                         />
                         <p className="text-xs text-slate-500 mt-1">Used in resource names (e.g., <strong>{formData.projectPrefix || 'proj'}</strong>-app-01)</p>
                     </div>

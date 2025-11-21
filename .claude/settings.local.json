@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker build:*)",
+      "Bash(docker run:*)",
+      "Bash(docker stop:*)",
+      "Bash(docker rm:*)",
+      "Bash(docker:*)",
+      "Bash(node --version)",
+      "Bash(npm --version:*)",
+      "mcp__MCP_DOCKER__mcp-find",
+      "mcp__MCP_DOCKER__mcp-add",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(docker-compose up:*)",
+      "Bash(docker-compose logs:*)",
+      "Bash(curl:*)",
+      "Bash(cat:*)",
+      "Bash(npm run build:*)",
+      "Bash(docker-compose build:*)",
+      "Bash(npm install:*)",
+      "Bash(move \"C:\\Users\\hdcor\\Azure-Mate\\electron\\main.js\" \"C:\\Users\\hdcor\\Azure-Mate\\electron\\main.cjs\")"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

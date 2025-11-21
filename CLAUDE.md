@@ -20,6 +20,13 @@ npm run build    # Build for production (runs TypeScript check + Vite build)
 npm run preview  # Preview production build
 ```
 
+**Docker commands:**
+```bash
+docker build -t azure-architect-mate:latest .        # Build Docker image
+docker run -d -p 3000:80 azure-architect-mate:latest # Run container
+docker-compose up -d                                  # Run with docker-compose
+```
+
 ## Architecture
 
 ### State Management
@@ -111,6 +118,19 @@ The project uses strict TypeScript with the following key settings:
 - JSX: react-jsx (React 18 automatic runtime)
 - `noEmit: true` (Vite handles compilation)
 - Strict mode enabled
+- `vite.config.ts` is excluded from main compilation and handled by `tsconfig.node.json`
+
+## Docker Configuration
+
+The project uses a multi-stage Docker build:
+1. **Builder stage**: Node 18 Alpine builds the Vite application
+2. **Production stage**: Nginx Alpine serves static files
+
+Key files:
+- `Dockerfile`: Multi-stage build configuration
+- `nginx.conf`: Nginx configuration with gzip, caching, and security headers
+- `.dockerignore`: Excludes node_modules, dist, and development files
+- `docker-compose.yml`: Orchestrates the container (maps port 3000 to container port 80)
 
 ## Common Development Patterns
 

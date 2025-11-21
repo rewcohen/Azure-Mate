@@ -60,7 +60,7 @@ export const mockSearchGraph = async (
         name: vm1Name,
         type: 'Microsoft.Compute/virtualMachines',
         location: location,
-        tags: { environment, owner: 'admin@contoso.com' },
+        tags: { environment, owner: 'cloud-admin' },
         properties: {
             hardwareProfile: { vmSize: "Standard_D2s_v3" },
             networkProfile: { networkInterfaces: [{ id: nic1Id }] },

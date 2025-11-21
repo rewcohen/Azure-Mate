@@ -1,7 +1,13 @@
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useMsal, useAccount } from '@azure/msal-react';
+import { AccountInfo, InteractionStatus } from '@azure/msal-browser';
 import { AzureContext } from '../types';
-import { ShieldCheck, Smartphone, Loader2, User, CheckCircle2, X, Globe, Lock, ChevronRight } from 'lucide-react';
+import {
+  ShieldCheck, Loader2, User, CheckCircle2, X, Globe, Lock,
+  ChevronRight, AlertCircle, UserPlus, LogIn, Building2, RefreshCw
+} from 'lucide-react';
+import { loginRequest, adminConsentRequest, isConfigured, buildAdminConsentUrl } from '../config/authConfig';
+import { listSubscriptions, getUserProfile, AzureSubscription } from '../services/azureService';
 
 interface ConnectWizardProps {
   onClose: () => void;
@@ -9,122 +15,309 @@ interface ConnectWizardProps {
   onAutoPopulate: (location: string, env: string, owner: string) => void;
 }
 
-// Mock Data for Simulation
-const MOCK_SUBSCRIPTIONS = [
-  { id: "a1b2c3d4-e5f6-7890-1234-567890abcdef", name: "Production Subscription (IT)", location: "eastus", env: "prod" },
-  { id: "98765432-10ab-cdef-1234-567890abcdef", name: "Development Sandbox", location: "westeurope", env: "dev" },
-  { id: "11223344-5566-7788-9900-aabbccddeeff", name: "Test Environment", location: "westus2", env: "test" }
-];
+type WizardStep = 'accounts' | 'authenticating' | 'subscriptions' | 'success' | 'error';
 
 const ConnectWizard: React.FC<ConnectWizardProps> = ({ onClose, onConnect, onAutoPopulate }) => {
-  const [step, setStep] = useState<'method' | 'authenticating' | 'mfa' | 'subscriptions' | 'success'>('method');
-  const [authCode, setAuthCode] = useState<number>(0);
-  const [selectedSub, setSelectedSub] = useState<string>(MOCK_SUBSCRIPTIONS[0].id);
+  const { instance, accounts, inProgress } = useMsal();
+  const [step, setStep] = useState<WizardStep>('accounts');
+  const [selectedAccount, setSelectedAccount] = useState<AccountInfo | null>(null);
+  const [subscriptions, setSubscriptions] = useState<AzureSubscription[]>([]);
+  const [selectedSub, setSelectedSub] = useState<string>('');
+  const [userProfile, setUserProfile] = useState<{ displayName: string; email: string } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
-  useEffect(() => {
-    if (step === 'authenticating') {
-      // Simulate redirection delay
-      setTimeout(() => {
-        setAuthCode(Math.floor(10 + Math.random() * 89)); // Random 2 digit code
-        setStep('mfa');
-      }, 2000);
-    }
-  }, [step]);
+  // Check if app is configured
+  const configured = isConfigured();
 
-  useEffect(() => {
-    if (step === 'mfa') {
-      // Simulate user approving on phone
-      setTimeout(() => {
-        setStep('subscriptions');
-      }, 3500);
-    }
-  }, [step]);
+  // Get all cached accounts from MSAL
+  const cachedAccounts = accounts;
 
-  const handleMethodSelect = () => {
+  // Handle account selection and login
+  const handleAccountSelect = useCallback(async (account: AccountInfo | null, isNewLogin: boolean = false) => {
+    setError(null);
+    setIsLoading(true);
     setStep('authenticating');
+
+    try {
+      let activeAccount = account;
+
+      if (isNewLogin || !account) {
+        // Initiate login with account picker
+        const response = await instance.loginPopup({
+          ...loginRequest,
+          prompt: 'select_account', // Always show account picker for new login
+        });
+        activeAccount = response.account;
+      } else {
+        // Use existing account, try silent token acquisition
+        instance.setActiveAccount(account);
+        try {
+          await instance.acquireTokenSilent({
+            ...loginRequest,
+            account: account,
+          });
+          activeAccount = account;
+        } catch {
+          // Silent failed, do interactive login
+          const response = await instance.loginPopup({
+            ...loginRequest,
+            account: account,
+          });
+          activeAccount = response.account;
+        }
+      }
+
+      if (!activeAccount) {
+        throw new Error('No account selected');
+      }
+
+      setSelectedAccount(activeAccount);
+      instance.setActiveAccount(activeAccount);
+
+      // Fetch user profile
+      try {
+        const profile = await getUserProfile(instance, activeAccount);
+        setUserProfile({
+          displayName: profile.displayName,
+          email: profile.userPrincipalName || profile.mail || activeAccount.username || '',
+        });
+      } catch {
+        // Fallback to account info if Graph call fails
+        setUserProfile({
+          displayName: activeAccount.name || 'User',
+          email: activeAccount.username || '',
+        });
+      }
+
+      // Fetch subscriptions
+      const subs = await listSubscriptions(instance, activeAccount);
+      setSubscriptions(subs);
+
+      if (subs.length > 0) {
+        setSelectedSub(subs[0].subscriptionId);
+        setStep('subscriptions');
+      } else {
+        setError('No Azure subscriptions found. Please ensure your account has access to Azure subscriptions.');
+        setStep('error');
+      }
+    } catch (err: any) {
+      console.error('Authentication error:', err);
+
+      // Handle specific errors
+      if (err.errorCode === 'user_cancelled') {
+        setStep('accounts');
+        setError(null);
+      } else if (err.errorCode === 'consent_required' || err.message?.includes('AADSTS65001')) {
+        setError('Admin consent required. Please have a Global Administrator sign in and approve the permissions, or use the Admin Consent link below.');
+        setStep('error');
+      } else if (err.errorCode === 'interaction_in_progress') {
+        setError('Another sign-in is already in progress. Please wait or refresh the page.');
+        setStep('error');
+      } else {
+        setError(err.message || 'Authentication failed. Please try again.');
+        setStep('error');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  }, [instance]);
+
+  // Handle admin consent flow
+  const handleAdminConsent = async () => {
+    setError(null);
+    setIsLoading(true);
+    setStep('authenticating');
+
+    try {
+      const response = await instance.loginPopup(adminConsentRequest);
+      if (response.account) {
+        await handleAccountSelect(response.account, false);
+      }
+    } catch (err: any) {
+      if (err.errorCode === 'user_cancelled') {
+        setStep('accounts');
+      } else {
+        setError(err.message || 'Admin consent failed. Please try again.');
+        setStep('error');
+      }
+    } finally {
+      setIsLoading(false);
+    }
   };
 
+  // Finalize connection
   const handleFinalize = () => {
-    const sub = MOCK_SUBSCRIPTIONS.find(s => s.id === selectedSub);
+    if (!selectedAccount || !selectedSub) return;
+
+    const sub = subscriptions.find(s => s.subscriptionId === selectedSub);
     if (sub) {
       onConnect({
         isConnected: true,
-        subscriptionId: sub.id,
-        tenantId: "72f988bf-86f1-41af-91ab-2d7cd011db47", // Mock Tenant
-        userDisplayName: "Cloud Architect",
-        username: "architect@contoso.com"
+        subscriptionId: sub.subscriptionId,
+        tenantId: sub.tenantId,
+        userDisplayName: userProfile?.displayName || selectedAccount.name || 'User',
+        username: userProfile?.email || selectedAccount.username || '',
       });
-      onAutoPopulate(sub.location, sub.env, "architect@contoso.com");
+
+      // Auto-populate global variables with subscription info
+      // Use the user's email as owner
+      const ownerEmail = userProfile?.email || selectedAccount.username || '';
+      onAutoPopulate('', '', ownerEmail);
+
       setStep('success');
       setTimeout(onClose, 1500);
     }
   };
 
+  // Get initials for avatar
+  const getInitials = (name: string): string => {
+    return name
+      .split(' ')
+      .map(n => n[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2);
+  };
+
+  // Calculate progress
+  const getProgress = (): number => {
+    switch (step) {
+      case 'accounts': return 10;
+      case 'authenticating': return 50;
+      case 'subscriptions': return 90;
+      case 'success': return 100;
+      case 'error': return 50;
+      default: return 0;
+    }
+  };
+
+  // If not configured, show setup instructions
+  if (!configured) {
+    return (
+      <div className="fixed inset-0 z-[100] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+        <div className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
+          <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-800/50">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-5 h-5 text-amber-400" />
+              <h3 className="font-semibold text-white">Configuration Required</h3>
+            </div>
+            <button onClick={onClose} className="text-slate-400 hover:text-white">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          <div className="p-6 space-y-4">
+            <p className="text-slate-300">
+              Azure AD App Registration is not configured. Please set up the following environment variable:
+            </p>
+            <div className="bg-slate-800 p-3 rounded-lg font-mono text-sm text-slate-300">
+              VITE_AZURE_CLIENT_ID=your-client-id
+            </div>
+            <p className="text-sm text-slate-400">
+              See <span className="text-blue-400">AZURE_AD_SETUP.md</span> for detailed instructions on creating an App Registration in Azure Portal.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="fixed inset-0 z-[100] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
       <div className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col relative">
-        
+
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-800/50">
           <div className="flex items-center gap-2">
             <Globe className="w-5 h-5 text-blue-400" />
             <h3 className="font-semibold text-white">Connect to Azure</h3>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-white">
+          <button onClick={onClose} className="text-slate-400 hover:text-white" disabled={isLoading}>
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="p-6 min-h-[300px] flex flex-col">
-          
-          {/* Step 1: Method Selection */}
-          {step === 'method' && (
-            <div className="space-y-6 flex-1">
-              <div className="text-center space-y-2">
-                <div className="w-12 h-12 bg-blue-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <Lock className="w-6 h-6 text-blue-500" />
+        <div className="p-6 min-h-[350px] flex flex-col">
+
+          {/* Step 1: Account Selection */}
+          {step === 'accounts' && (
+            <div className="space-y-4 flex-1">
+              <div className="text-center space-y-2 mb-6">
+                <div className="w-12 h-12 bg-blue-500/10 rounded-full flex items-center justify-center mx-auto">
+                  <Lock className="w-6 h-6 text-blue-500" />
                 </div>
-                <h4 className="text-lg font-medium text-white">Sign in to Microsoft Entra ID</h4>
-                <p className="text-sm text-slate-400">Securely connect to your Azure Tenant to import context and validate deployments.</p>
+                <h4 className="text-lg font-medium text-white">Sign in with Microsoft</h4>
+                <p className="text-sm text-slate-400">
+                  Choose an account to connect to your Azure subscriptions.
+                </p>
               </div>
 
-              <div className="space-y-3">
-                <button 
-                    onClick={handleMethodSelect}
-                    className="w-full flex items-center justify-between p-4 rounded-lg border border-slate-700 bg-slate-800/50 hover:bg-slate-800 hover:border-blue-500 transition-all group"
-                >
-                    <div className="flex items-center gap-3">
-                        <div className="p-2 bg-slate-700 rounded group-hover:bg-blue-600 transition-colors">
-                            <User className="w-5 h-5 text-slate-300 group-hover:text-white" />
-                        </div>
-                        <div className="text-left">
-                            <div className="text-sm font-medium text-white">Interactive Login</div>
-                            <div className="text-xs text-slate-500">Browser-based authentication</div>
-                        </div>
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-slate-600 group-hover:text-blue-400" />
-                </button>
+              {/* Existing Accounts */}
+              {cachedAccounts.length > 0 && (
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">
+                    Signed-in Accounts
+                  </label>
+                  {cachedAccounts.map((account) => (
+                    <button
+                      key={account.homeAccountId}
+                      onClick={() => handleAccountSelect(account, false)}
+                      className="w-full flex items-center gap-3 p-3 rounded-lg border border-slate-700 bg-slate-800/50 hover:bg-slate-800 hover:border-blue-500 transition-all group"
+                    >
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm">
+                        {getInitials(account.name || 'U')}
+                      </div>
+                      <div className="flex-1 text-left">
+                        <div className="text-sm font-medium text-white">{account.name || 'User'}</div>
+                        <div className="text-xs text-slate-400">{account.username}</div>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-slate-600 group-hover:text-blue-400" />
+                    </button>
+                  ))}
+                </div>
+              )}
 
-                <button 
-                    className="w-full flex items-center justify-between p-4 rounded-lg border border-slate-700 bg-slate-800/50 opacity-50 cursor-not-allowed"
-                    title="Not available in demo mode"
+              {/* Sign in with new account */}
+              <div className="space-y-2">
+                {cachedAccounts.length > 0 && (
+                  <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">
+                    Or use a different account
+                  </label>
+                )}
+                <button
+                  onClick={() => handleAccountSelect(null, true)}
+                  className="w-full flex items-center gap-3 p-3 rounded-lg border border-slate-700 bg-slate-800/50 hover:bg-slate-800 hover:border-blue-500 transition-all group"
                 >
-                    <div className="flex items-center gap-3">
-                        <div className="p-2 bg-slate-700 rounded">
-                            <ShieldCheck className="w-5 h-5 text-slate-300" />
-                        </div>
-                        <div className="text-left">
-                            <div className="text-sm font-medium text-white">Service Principal</div>
-                            <div className="text-xs text-slate-500">Client ID & Secret</div>
-                        </div>
-                    </div>
-                    <div className="text-[10px] bg-slate-800 px-2 py-1 rounded text-slate-400">Pro</div>
+                  <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center group-hover:bg-blue-600 transition-colors">
+                    <UserPlus className="w-5 h-5 text-slate-300 group-hover:text-white" />
+                  </div>
+                  <div className="flex-1 text-left">
+                    <div className="text-sm font-medium text-white">Sign in with another account</div>
+                    <div className="text-xs text-slate-400">Use a different Microsoft 365 account</div>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-slate-600 group-hover:text-blue-400" />
+                </button>
+              </div>
+
+              {/* Admin Consent Option */}
+              <div className="pt-4 border-t border-slate-800">
+                <button
+                  onClick={handleAdminConsent}
+                  className="w-full flex items-center gap-3 p-3 rounded-lg border border-dashed border-slate-700 hover:border-amber-500 hover:bg-slate-800/50 transition-all group"
+                >
+                  <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center">
+                    <ShieldCheck className="w-5 h-5 text-amber-400" />
+                  </div>
+                  <div className="flex-1 text-left">
+                    <div className="text-sm font-medium text-white">Admin Consent</div>
+                    <div className="text-xs text-slate-400">Global Admin: Approve for your organization</div>
+                  </div>
                 </button>
               </div>
             </div>
           )}
 
-          {/* Step 2: Authentication Redirect */}
+          {/* Step 2: Authenticating */}
           {step === 'authenticating' && (
             <div className="flex flex-col items-center justify-center flex-1 text-center space-y-4">
               <div className="relative">
@@ -132,101 +325,133 @@ const ConnectWizard: React.FC<ConnectWizardProps> = ({ onClose, onConnect, onAut
                 <Loader2 className="w-12 h-12 text-blue-500 animate-spin relative z-10" />
               </div>
               <div>
-                <h4 className="text-lg font-medium text-white">Contacting Microsoft Identity...</h4>
-                <p className="text-sm text-slate-400">Redirecting to secure login page.</p>
+                <h4 className="text-lg font-medium text-white">Authenticating...</h4>
+                <p className="text-sm text-slate-400">Please complete sign-in in the popup window.</p>
               </div>
             </div>
           )}
 
-          {/* Step 3: MFA Simulation */}
-          {step === 'mfa' && (
-            <div className="flex flex-col items-center justify-center flex-1 text-center space-y-6">
-              <div className="w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center border border-slate-700 animate-bounce">
-                <Smartphone className="w-8 h-8 text-emerald-400" />
+          {/* Step 3: Subscription Selection */}
+          {step === 'subscriptions' && selectedAccount && (
+            <div className="flex flex-col flex-1 space-y-4">
+              <div className="flex items-center gap-3 pb-4 border-b border-slate-800">
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold">
+                  {getInitials(userProfile?.displayName || selectedAccount.name || 'U')}
+                </div>
+                <div className="flex-1">
+                  <div className="text-sm font-bold text-white">{userProfile?.displayName || selectedAccount.name}</div>
+                  <div className="text-xs text-slate-400">{userProfile?.email || selectedAccount.username}</div>
+                </div>
+                <button
+                  onClick={() => setStep('accounts')}
+                  className="text-xs text-slate-400 hover:text-blue-400 flex items-center gap-1"
+                >
+                  <RefreshCw className="w-3 h-3" />
+                  Switch
+                </button>
               </div>
-              
-              <div className="space-y-2">
-                <h4 className="text-lg font-bold text-white">Approve sign-in request</h4>
-                <p className="text-sm text-slate-400 max-w-[250px] mx-auto">
-                    Open your Authenticator app and enter the number shown below.
+
+              <div className="space-y-2 flex-1 overflow-auto">
+                <label className="text-sm font-medium text-slate-300">Select Subscription</label>
+                <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                  {subscriptions.map(sub => (
+                    <button
+                      key={sub.subscriptionId}
+                      onClick={() => setSelectedSub(sub.subscriptionId)}
+                      className={`w-full text-left p-3 rounded-lg border transition-all ${
+                        selectedSub === sub.subscriptionId
+                          ? 'bg-blue-600/10 border-blue-500 ring-1 ring-blue-500'
+                          : 'bg-slate-800 border-slate-700 hover:border-slate-500'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Building2 className="w-4 h-4 text-slate-400" />
+                        <div className="text-sm font-medium text-white">{sub.displayName}</div>
+                      </div>
+                      <div className="text-xs text-slate-500 font-mono mt-1">{sub.subscriptionId}</div>
+                      <div className="flex gap-2 mt-2">
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                          sub.state === 'Enabled'
+                            ? 'bg-emerald-900/50 text-emerald-400'
+                            : 'bg-slate-900 text-slate-400'
+                        }`}>
+                          {sub.state}
+                        </span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <button
+                onClick={handleFinalize}
+                disabled={!selectedSub}
+                className="mt-auto w-full py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors"
+              >
+                Connect
+              </button>
+            </div>
+          )}
+
+          {/* Step 4: Success */}
+          {step === 'success' && (
+            <div className="flex flex-col items-center justify-center flex-1 text-center space-y-4">
+              <CheckCircle2 className="w-16 h-16 text-emerald-500 animate-in zoom-in duration-300" />
+              <div>
+                <h4 className="text-xl font-bold text-white">Connected Successfully</h4>
+                <p className="text-sm text-slate-400 mt-2">
+                  Your Azure subscription is now connected.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Error State */}
+          {step === 'error' && (
+            <div className="flex flex-col items-center justify-center flex-1 text-center space-y-4">
+              <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center">
+                <AlertCircle className="w-8 h-8 text-red-400" />
+              </div>
+              <div>
+                <h4 className="text-lg font-bold text-white">Connection Failed</h4>
+                <p className="text-sm text-red-400 mt-2 max-w-[300px]">
+                  {error}
                 </p>
               </div>
 
-              <div className="text-4xl font-mono font-bold text-white tracking-widest bg-slate-800 px-6 py-3 rounded-lg border border-slate-700">
-                {authCode}
-              </div>
-              
-              <p className="text-xs text-slate-500 animate-pulse">Waiting for approval...</p>
-            </div>
-          )}
-
-          {/* Step 4: Subscription Selection */}
-          {step === 'subscriptions' && (
-            <div className="flex flex-col flex-1 space-y-4">
-                <div className="flex items-center gap-3 pb-4 border-b border-slate-800">
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold">
-                        CA
-                    </div>
-                    <div>
-                        <div className="text-sm font-bold text-white">Cloud Architect</div>
-                        <div className="text-xs text-slate-400">architect@contoso.com</div>
-                    </div>
-                </div>
-
-                <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-300">Select Subscription</label>
-                    <div className="space-y-2">
-                        {MOCK_SUBSCRIPTIONS.map(sub => (
-                            <button
-                                key={sub.id}
-                                onClick={() => setSelectedSub(sub.id)}
-                                className={`w-full text-left p-3 rounded-lg border transition-all ${
-                                    selectedSub === sub.id 
-                                    ? 'bg-blue-600/10 border-blue-500 ring-1 ring-blue-500' 
-                                    : 'bg-slate-800 border-slate-700 hover:border-slate-500'
-                                }`}
-                            >
-                                <div className="text-sm font-medium text-white">{sub.name}</div>
-                                <div className="text-xs text-slate-500 font-mono mt-1">{sub.id}</div>
-                                <div className="flex gap-2 mt-2">
-                                    <span className="text-[10px] bg-slate-900 px-1.5 py-0.5 rounded text-slate-400">{sub.location}</span>
-                                    <span className="text-[10px] bg-slate-900 px-1.5 py-0.5 rounded text-slate-400">{sub.env}</span>
-                                </div>
-                            </button>
-                        ))}
-                    </div>
-                </div>
-
-                <button 
-                    onClick={handleFinalize}
-                    className="mt-auto w-full py-2 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-lg transition-colors"
+              {error?.includes('Admin consent') && (
+                <a
+                  href={buildAdminConsentUrl()}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm text-blue-400 hover:text-blue-300 underline"
                 >
-                    Connect & Auto-Populate
-                </button>
-            </div>
-          )}
+                  Open Admin Consent Page
+                </a>
+              )}
 
-          {/* Step 5: Success */}
-          {step === 'success' && (
-             <div className="flex flex-col items-center justify-center flex-1 text-center space-y-4">
-                <CheckCircle2 className="w-16 h-16 text-emerald-500 animate-in zoom-in duration-300" />
-                <div>
-                    <h4 className="text-xl font-bold text-white">Connected Successfully</h4>
-                    <p className="text-sm text-slate-400 mt-2">
-                        Global variables have been updated based on your subscription context.
-                    </p>
-                </div>
-             </div>
+              <button
+                onClick={() => {
+                  setError(null);
+                  setStep('accounts');
+                }}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition-colors"
+              >
+                Try Again
+              </button>
+            </div>
           )}
 
         </div>
-        
+
         {/* Progress Bar */}
         <div className="h-1 bg-slate-800 w-full">
-            <div 
-                className="h-full bg-blue-500 transition-all duration-500"
-                style={{ width: step === 'method' ? '10%' : step === 'authenticating' ? '40%' : step === 'mfa' ? '60%' : step === 'subscriptions' ? '90%' : '100%' }}
-            ></div>
+          <div
+            className={`h-full transition-all duration-500 ${
+              step === 'error' ? 'bg-red-500' : 'bg-blue-500'
+            }`}
+            style={{ width: `${getProgress()}%` }}
+          ></div>
         </div>
       </div>
     </div>

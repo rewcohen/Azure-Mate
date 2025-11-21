@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useMsal } from '@azure/msal-react';
 import { AzureCategory, ViewState, AzureContext, ServiceHealth } from '../types';
 import { fetchAzureStatus, sortServiceHealth } from '../services/azureStatusService';
 import ConnectWizard from './ConnectWizard';
@@ -44,8 +45,8 @@ interface SidebarProps {
   onStartOver: () => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ 
-  currentCategory, 
+const Sidebar: React.FC<SidebarProps> = ({
+  currentCategory,
   onSelectCategory,
   currentView,
   onSelectView,
@@ -58,6 +59,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   onAutoPopulate,
   onStartOver
 }) => {
+  const { instance } = useMsal();
   const [showWizard, setShowWizard] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   
@@ -91,7 +93,8 @@ const Sidebar: React.FC<SidebarProps> = ({
   if (criticalCount > 0) overallStatus = 'Critical';
   else if (warningCount > 0) overallStatus = 'Warning';
 
-  const handleDisconnect = () => {
+  const handleDisconnect = async () => {
+      // Clear the Azure context first
       onUpdateContext({
           subscriptionId: '',
           tenantId: '',
@@ -99,6 +102,21 @@ const Sidebar: React.FC<SidebarProps> = ({
           userDisplayName: undefined,
           username: undefined
       });
+
+      // Log out from MSAL (clears cached tokens)
+      try {
+          const activeAccount = instance.getActiveAccount();
+          if (activeAccount) {
+              // Use logout popup to avoid full page redirect
+              await instance.logoutPopup({
+                  account: activeAccount,
+                  postLogoutRedirectUri: window.location.origin,
+              });
+          }
+      } catch (error) {
+          console.error('Logout error:', error);
+          // Even if logout fails, we've already cleared the local context
+      }
   };
 
   // Helpers for Safe Navigation

@@ -1671,7 +1671,7 @@ Write-Host "NAT Gateway deployed and attached to 'default' subnet."`
     ],
     inputs: [
       { id: 'rgSuffix', label: 'RG Suffix', type: 'text', defaultValue: 'dns' },
-      { id: 'zoneName', label: 'Domain Name', type: 'text', defaultValue: 'contoso.com', placeholder: 'example.com' },
+      { id: 'zoneName', label: 'Domain Name', type: 'text', defaultValue: 'example.com', placeholder: 'yourdomain.com' },
       { id: 'addWww', label: 'Add "www" Record', type: 'select', options: ['Yes', 'No'], defaultValue: 'Yes', description: 'Creates a placeholder A record.' }
     ],
     learnLinks: [{ title: 'Azure DNS Overview', url: 'https://learn.microsoft.com/en-us/azure/dns/dns-overview' }],
@@ -1935,7 +1935,7 @@ Write-Host "Logic App Standard Deployed."`
       { id: 'rgSuffix', label: 'RG Suffix', type: 'text', defaultValue: 'api' },
       { id: 'apimName', label: 'APIM Name', type: 'text', defaultValue: 'apim-gateway-01' },
       { id: 'sku', label: 'SKU', type: 'select', options: ['Developer', 'Standard', 'Premium'], defaultValue: 'Developer', description: 'Developer is cheapest for non-prod.' },
-      { id: 'publisherEmail', label: 'Admin Email', type: 'text', defaultValue: 'admin@contoso.com' }
+      { id: 'publisherEmail', label: 'Admin Email', type: 'text', placeholder: 'admin@yourdomain.com', description: 'Required for APIM admin notifications' }
     ],
     learnLinks: [{ title: 'Create API Management', url: 'https://learn.microsoft.com/en-us/azure/api-management/get-started-create-service-instance-powershell' }],
     diagramCode: `graph LR

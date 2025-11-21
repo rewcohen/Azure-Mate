@@ -1,8 +1,12 @@
-version: '3.8'
-
 services:
   azure-architect-mate:
-    build: .
+    build:
+      context: .
+      args:
+        # Azure AD App Registration - Set these in .env file or environment
+        VITE_AZURE_CLIENT_ID: ${VITE_AZURE_CLIENT_ID:-}
+        VITE_AZURE_TENANT_ID: ${VITE_AZURE_TENANT_ID:-organizations}
+        VITE_AZURE_REDIRECT_URI: ${VITE_AZURE_REDIRECT_URI:-http://localhost:3000}
     container_name: azure-architect-mate
     ports:
       - "3000:80"
