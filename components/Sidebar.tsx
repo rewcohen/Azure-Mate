@@ -1,8 +1,8 @@
-
 import React, { useState, useEffect } from 'react';
 import { AzureCategory, ViewState, AzureContext, ServiceHealth } from '../types';
 import { fetchAzureStatus, sortServiceHealth } from '../services/azureStatusService';
 import ConnectWizard from './ConnectWizard';
+import HelpModal from './HelpModal';
 import { 
   Server, 
   Network, 
@@ -23,7 +23,10 @@ import {
   AlertTriangle,
   XCircle,
   Loader2,
-  ShieldCheck
+  ShieldCheck,
+  Trash2,
+  Home,
+  HelpCircle
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -38,6 +41,7 @@ interface SidebarProps {
   projectName?: string;
   projectItemCount?: number;
   onAutoPopulate: (location: string, env: string, owner: string) => void;
+  onStartOver: () => void;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ 
@@ -51,9 +55,11 @@ const Sidebar: React.FC<SidebarProps> = ({
   onResetWizard,
   projectName,
   projectItemCount,
-  onAutoPopulate
+  onAutoPopulate,
+  onStartOver
 }) => {
   const [showWizard, setShowWizard] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   
   // System Status State
   const [serviceStatuses, setServiceStatuses] = useState<ServiceHealth[]>([]);
@@ -136,6 +142,10 @@ const Sidebar: React.FC<SidebarProps> = ({
           />
       )}
 
+      {showHelp && (
+          <HelpModal onClose={() => setShowHelp(false)} />
+      )}
+
       <div className="p-6 border-b border-slate-800">
         <div className="flex items-center gap-2 text-blue-400">
           <Shield className="w-6 h-6" />
@@ -195,9 +205,18 @@ const Sidebar: React.FC<SidebarProps> = ({
         <div className="px-4 mb-2">
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Tools</p>
           <button 
+            onClick={() => handleNavClick(() => onSelectView(ViewState.HOME))}
+            onDoubleClick={() => handleNavDoubleClick(() => onSelectView(ViewState.HOME))}
+            className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors ${currentView === ViewState.HOME ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
+          >
+            <Home className="w-4 h-4" />
+            Home
+          </button>
+          
+          <button 
             onClick={() => handleNavClick(() => onSelectView(ViewState.CATALOG))}
             onDoubleClick={() => handleNavDoubleClick(() => onSelectView(ViewState.CATALOG))}
-            className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors ${currentView === ViewState.CATALOG ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
+            className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm mt-1 transition-colors ${currentView === ViewState.CATALOG ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
           >
             <Box className="w-4 h-4" />
             Config Library
@@ -236,6 +255,14 @@ const Sidebar: React.FC<SidebarProps> = ({
             <Settings className="w-4 h-4" />
             Global Config
           </button>
+
+          <button 
+            onClick={() => setShowHelp(true)}
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm mt-1 transition-colors text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+          >
+            <HelpCircle className="w-4 h-4" />
+            Help & Guide
+          </button>
         </div>
 
         <div className="mt-6 px-4">
@@ -264,6 +291,23 @@ const Sidebar: React.FC<SidebarProps> = ({
             ))}
           </div>
         </div>
+      </div>
+
+      {/* Start Over Button */}
+      <div className="px-4 py-3 border-t border-slate-800 bg-slate-900/20">
+          <button 
+            type="button"
+            onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onStartOver();
+            }}
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-xs font-bold text-red-400 hover:bg-red-950/30 hover:text-red-300 transition-all border border-transparent hover:border-red-900/50 group cursor-pointer"
+            title="Reset all application state and data"
+          >
+            <Trash2 className="w-4 h-4 group-hover:animate-bounce" />
+            Start Over
+          </button>
       </div>
 
       {/* System Status Footer */}

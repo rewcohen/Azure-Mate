@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { ProjectState, SavedDeploymentItem } from '../types';
+import { SCENARIOS } from '../constants';
 import Mermaid from './Mermaid';
 import { 
   ShoppingCart, 
@@ -13,7 +14,11 @@ import {
   ArrowRight, 
   Layers, 
   Trash2, 
-  PieChart 
+  PieChart,
+  AlertTriangle,
+  ShieldAlert,
+  Unlink,
+  MapPin
 } from 'lucide-react';
 
 interface EndStateDeploymentProps {
@@ -37,7 +42,7 @@ const EndStateDeployment: React.FC<EndStateDeploymentProps> = ({ project, onRemo
   }, 0);
 
   // Aggregate costs by Resource Name to create a BOM (Bill of Materials)
-  const aggregatedCosts = project.items.reduce((acc: Record<string, { count: number; total: number }>, item) => {
+  const aggregatedCosts = project.items.reduce((acc, item) => {
     if (item.costEstimate?.items) {
         item.costEstimate.items.forEach(costItem => {
             const key = costItem.resourceName;
@@ -50,6 +55,46 @@ const EndStateDeployment: React.FC<EndStateDeploymentProps> = ({ project, onRemo
     }
     return acc;
   }, {} as Record<string, { count: number; total: number }>);
+
+  // --- Architecture Validation Engine ---
+  const validationReport = useMemo(() => {
+    const errors: string[] = [];
+    const warnings: string[] = [];
+    const cartScenarioIds = new Set(project.items.map(i => i.scenarioId));
+    
+    // Track unique values to check for consistency
+    const locations = new Set<string>();
+    const environments = new Set<string>();
+
+    project.items.forEach(item => {
+        // 1. Check Prerequisites
+        const scenarioDef = SCENARIOS.find(s => s.id === item.scenarioId);
+        
+        if (scenarioDef?.prerequisites) {
+            scenarioDef.prerequisites.forEach(reqId => {
+                if (!cartScenarioIds.has(reqId)) {
+                    const reqScenario = SCENARIOS.find(s => s.id === reqId);
+                    const reqTitle = reqScenario ? reqScenario.title : reqId;
+                    errors.push(`'${item.scenarioTitle}' depends on '${reqTitle}', which is missing from the plan.`);
+                }
+            });
+        }
+
+        // 2. Collect Variables for Consistency Check
+        if (item.variables['location']) locations.add(String(item.variables['location']));
+        if (item.variables['environment']) environments.add(String(item.variables['environment']));
+    });
+
+    // 3. Consistency Warnings
+    if (locations.size > 1) {
+        warnings.push(`Multi-Region Deployment detected: ${Array.from(locations).join(', ')}. Ensure you have planned for VNet Peering and data transfer costs.`);
+    }
+    if (environments.size > 1) {
+        warnings.push(`Mixed Environments detected: ${Array.from(environments).join(', ')}. Typically, resources should belong to a single environment (e.g., all 'dev' or all 'prod').`);
+    }
+
+    return { errors, warnings, passed: errors.length === 0 && warnings.length === 0 };
+  }, [project.items]);
 
   if (project.items.length === 0) {
     return (
@@ -86,7 +131,47 @@ const EndStateDeployment: React.FC<EndStateDeploymentProps> = ({ project, onRemo
 
       <div className="p-8 max-w-6xl mx-auto w-full space-y-8">
         
-        {/* 1. Implementation Workflow Guide */}
+        {/* 1. Architecture Health Check */}
+        <div className={`rounded-xl border p-6 transition-colors ${
+            validationReport.passed 
+            ? 'bg-emerald-950/10 border-emerald-900/30' 
+            : (validationReport.errors.length > 0 ? 'bg-red-950/10 border-red-900/30' : 'bg-amber-950/10 border-amber-900/30')
+        }`}>
+            <div className="flex items-center justify-between mb-4">
+                <h3 className={`text-lg font-bold flex items-center gap-2 ${
+                     validationReport.passed ? 'text-emerald-400' : (validationReport.errors.length > 0 ? 'text-red-400' : 'text-amber-400')
+                }`}>
+                    {validationReport.passed ? <CheckCircle2 className="w-5 h-5" /> : <ShieldAlert className="w-5 h-5" />}
+                    Architecture Validation
+                </h3>
+                <span className="text-xs font-medium px-2 py-1 rounded bg-slate-900 border border-slate-800 text-slate-400">
+                    {validationReport.passed ? 'Solution Valid' : `${validationReport.errors.length} Critical, ${validationReport.warnings.length} Warnings`}
+                </span>
+            </div>
+
+            {validationReport.passed ? (
+                <p className="text-sm text-slate-400">
+                    All configurations appear consistent. Dependencies are met, and regional settings match.
+                </p>
+            ) : (
+                <div className="space-y-3">
+                    {validationReport.errors.map((err, idx) => (
+                        <div key={`err-${idx}`} className="flex items-start gap-3 p-3 rounded bg-red-900/20 border border-red-900/30">
+                            <Unlink className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />
+                            <div className="text-sm text-red-200">{err}</div>
+                        </div>
+                    ))}
+                    {validationReport.warnings.map((warn, idx) => (
+                        <div key={`warn-${idx}`} className="flex items-start gap-3 p-3 rounded bg-amber-900/20 border border-amber-900/30">
+                            <MapPin className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
+                            <div className="text-sm text-amber-200">{warn}</div>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+
+        {/* 2. Implementation Workflow Guide */}
         <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
             <div className="p-4 border-b border-slate-800 bg-slate-800/50 flex items-center gap-2">
                 <Layers className="w-5 h-5 text-blue-400" />
@@ -109,8 +194,8 @@ const EndStateDeployment: React.FC<EndStateDeploymentProps> = ({ project, onRemo
                                 <div className="text-xs text-slate-400 mb-2">
                                    Estimated Cost: <span className="text-emerald-400">{formatCurrency(item.costEstimate?.totalMonthly || 0)}</span>
                                 </div>
-                                {/* Deployment Tips extracted */}
-                                {item.deploymentTips.length > 0 && (
+                                {/* Deployment Tips extracted - safe check added */}
+                                {item.deploymentTips && item.deploymentTips.length > 0 && (
                                     <div className="mt-3 p-2 bg-blue-950/30 rounded border border-blue-900/30">
                                         <p className="text-[10px] font-bold text-blue-400 flex items-center gap-1 mb-1">
                                             <Lightbulb className="w-3 h-3" /> Deployment Tip
@@ -129,7 +214,7 @@ const EndStateDeployment: React.FC<EndStateDeploymentProps> = ({ project, onRemo
             </div>
         </div>
 
-        {/* 2. Code Cart Items (Condensed/Expanded) */}
+        {/* 3. Code Cart Items (Condensed/Expanded) */}
         <div className="space-y-4">
              <div className="flex items-center gap-2 mb-2">
                 <Code className="w-5 h-5 text-purple-400" />
@@ -263,12 +348,15 @@ const EndStateDeployment: React.FC<EndStateDeploymentProps> = ({ project, onRemo
                  <div className="mb-6">
                      <h5 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Bill of Materials (Aggregated)</h5>
                      <div className="space-y-2">
-                         {Object.entries(aggregatedCosts).map(([name, data]) => (
-                             <div key={name} className="flex justify-between items-center text-sm">
-                                 <span className="text-slate-300 truncate mr-2">{name} <span className="text-slate-600 text-xs">x{data.count}</span></span>
-                                 <span className="font-mono text-slate-400">{formatCurrency(data.total)}</span>
-                             </div>
-                         ))}
+                         {Object.entries(aggregatedCosts).map(([name, dataRaw]) => {
+                             const data = dataRaw as { count: number; total: number };
+                             return (
+                                 <div key={name} className="flex justify-between items-center text-sm">
+                                     <span className="text-slate-300 truncate mr-2">{name} <span className="text-slate-600 text-xs">x{data.count}</span></span>
+                                     <span className="font-mono text-slate-400">{formatCurrency(data.total)}</span>
+                                 </div>
+                             );
+                         })}
                      </div>
                  </div>
 
@@ -276,13 +364,24 @@ const EndStateDeployment: React.FC<EndStateDeploymentProps> = ({ project, onRemo
                      <span className="font-bold text-white">Total Monthly Estimate</span>
                      <span className="font-bold text-2xl text-emerald-400">{formatCurrency(totalMonthlyCost)}</span>
                  </div>
+                 
                  <button 
+                    disabled={!validationReport.passed}
                     onClick={() => alert("This would export all scripts into a single ZIP or consolidated .ps1 file.")}
-                    className="w-full mt-6 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg transition-colors flex items-center justify-center gap-2"
+                    className={`w-full mt-6 py-3 font-bold rounded-lg transition-colors flex items-center justify-center gap-2 ${
+                        validationReport.passed 
+                        ? 'bg-blue-600 hover:bg-blue-500 text-white' 
+                        : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                    }`}
                  >
-                     <CheckCircle2 className="w-5 h-5" />
-                     Finalize & Export Deployment
+                     {validationReport.passed ? <CheckCircle2 className="w-5 h-5" /> : <AlertTriangle className="w-5 h-5" />}
+                     {validationReport.passed ? 'Finalize & Export Deployment' : 'Resolve Issues to Export'}
                  </button>
+                 {!validationReport.passed && (
+                     <p className="text-xs text-center text-red-400 mt-2">
+                         Fix architecture issues above to proceed.
+                     </p>
+                 )}
              </div>
         </div>
 

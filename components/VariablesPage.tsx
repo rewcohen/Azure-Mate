@@ -1,18 +1,30 @@
+
 import React, { useState, useEffect, useRef } from 'react';
-import { GlobalVariables } from '../types';
-import { Save, Settings, Tag, Globe, MapPin, Briefcase, User, Layers, HelpCircle, Cpu, Loader2, Check } from 'lucide-react';
+import { GlobalVariables, ViewState } from '../types';
+import { updateLivePricing } from '../services/pricingService';
+import { Save, Settings, Tag, Globe, MapPin, Briefcase, User, Layers, HelpCircle, Cpu, Loader2, Check, DollarSign, RefreshCw, AlertTriangle, ArrowRight } from 'lucide-react';
 
 interface VariablesPageProps {
   config: GlobalVariables;
   onSave: (newConfig: GlobalVariables) => void;
+  onNavigate?: (view: ViewState) => void;
 }
 
-const VariablesPage: React.FC<VariablesPageProps> = ({ config, onSave }) => {
+const VariablesPage: React.FC<VariablesPageProps> = ({ config, onSave, onNavigate }) => {
   const [formData, setFormData] = useState<GlobalVariables>(config);
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   
+  // Live Pricing State
+  const [pricingStatus, setPricingStatus] = useState<'idle' | 'updating' | 'success' | 'error'>('idle');
+  const [updatedCount, setUpdatedCount] = useState(0);
+  
   // Ref to hold the timeout ID so we can clear it
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Sync local state when props change (e.g., on "Start Over")
+  useEffect(() => {
+      setFormData(config);
+  }, [config]);
 
   // Cleanup timeout on unmount
   useEffect(() => {
@@ -37,6 +49,20 @@ const VariablesPage: React.FC<VariablesPageProps> = ({ config, onSave }) => {
       // Reset to idle after showing "Saved" for a bit
       setTimeout(() => setStatus('idle'), 2000);
     }, 1000);
+  };
+
+  const handleUpdatePricing = async () => {
+      setPricingStatus('updating');
+      try {
+          const count = await updateLivePricing();
+          setUpdatedCount(count);
+          setPricingStatus('success');
+          setTimeout(() => setPricingStatus('idle'), 5000);
+      } catch (e) {
+          console.error(e);
+          setPricingStatus('error');
+          setTimeout(() => setPricingStatus('idle'), 5000);
+      }
   };
 
   return (
@@ -65,7 +91,7 @@ const VariablesPage: React.FC<VariablesPageProps> = ({ config, onSave }) => {
         </div>
       </div>
 
-      <div className="p-8 max-w-4xl mx-auto w-full space-y-6">
+      <div className="p-8 max-w-4xl mx-auto w-full space-y-6 pb-24">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             
             {/* Naming Convention Section */}
@@ -161,6 +187,55 @@ const VariablesPage: React.FC<VariablesPageProps> = ({ config, onSave }) => {
             </div>
         </div>
 
+        {/* Pricing Data Section */}
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+             <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                <DollarSign className="w-5 h-5 text-emerald-500" />
+                Cost Estimation Data
+            </h3>
+            <div className="flex items-start gap-6">
+                <div className="flex-1">
+                    <p className="text-sm text-slate-400 mb-4">
+                        The application estimates costs using a mix of static data and live Azure Retail Prices. 
+                        Click below to fetch the latest Virtual Machine pricing from the official Azure API.
+                    </p>
+                    
+                    <button 
+                        onClick={handleUpdatePricing}
+                        disabled={pricingStatus === 'updating'}
+                        className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-sm text-white transition-colors disabled:opacity-50"
+                    >
+                        {pricingStatus === 'updating' ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                            <RefreshCw className="w-4 h-4" />
+                        )}
+                        {pricingStatus === 'updating' ? 'Updating Catalog...' : 'Update Pricing from Azure API'}
+                    </button>
+
+                    {pricingStatus === 'success' && (
+                        <p className="text-xs text-emerald-400 mt-2 flex items-center gap-1.5 animate-in fade-in">
+                            <Check className="w-3 h-3" /> Successfully updated {updatedCount} price records.
+                        </p>
+                    )}
+                    
+                    {pricingStatus === 'error' && (
+                        <p className="text-xs text-red-400 mt-2 flex items-center gap-1.5 animate-in fade-in">
+                            <AlertTriangle className="w-3 h-3" /> Update failed. Ensure you have internet access or check console for CORS errors.
+                        </p>
+                    )}
+                </div>
+                <div className="flex-1 bg-slate-950 rounded-lg border border-slate-800 p-4">
+                    <p className="text-xs text-slate-400 leading-relaxed">
+                        <span className="text-emerald-500 font-semibold">Source:</span> https://prices.azure.com/api/retail/prices<br/>
+                        <span className="text-slate-500 italic block mt-1">
+                            Note: Live pricing updates may be blocked by browser CORS policies in some environments. If this fails, the app falls back to the cached static catalog.
+                        </span>
+                    </p>
+                </div>
+            </div>
+        </div>
+
         {/* AI Settings Section */}
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
              <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
@@ -226,6 +301,19 @@ const VariablesPage: React.FC<VariablesPageProps> = ({ config, onSave }) => {
                 </div>
             </div>
         </div>
+
+        {/* Workflow Footer Navigation */}
+        {onNavigate && (
+            <div className="mt-8 pt-6 border-t border-slate-800 flex justify-end">
+                <button 
+                    onClick={() => onNavigate(ViewState.CATALOG)}
+                    className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg shadow-lg shadow-blue-900/20 transition-all group"
+                >
+                    Next: Configuration Library
+                    <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                </button>
+            </div>
+        )}
       </div>
     </div>
   );
