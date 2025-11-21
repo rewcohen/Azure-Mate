@@ -6,6 +6,16 @@ import VariablesPage from './components/VariablesPage';
 import EndStateDeployment from './components/EndStateDeployment';
 import { AzureCategory, ViewState, AzureContext, GlobalVariables, Scenario, ProjectState, SavedDeploymentItem } from './types';
 
+const DEFAULT_GLOBAL_VARS: GlobalVariables = {
+    projectPrefix: 'demo',
+    environment: 'dev',
+    location: 'eastus',
+    costCenter: 'IT-General',
+    owner: 'cloud-admin',
+    proximityPlacementGroup: '',
+    ollamaModel: 'llama3'
+};
+
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<ViewState>(ViewState.CATALOG);
   const [currentCategory, setCurrentCategory] = useState<AzureCategory | null>(null);
@@ -27,15 +37,7 @@ const App: React.FC = () => {
           console.warn("Failed to load variables from local storage", e);
       }
       
-      return {
-          projectPrefix: 'demo',
-          environment: 'dev',
-          location: 'eastus',
-          costCenter: 'IT-General',
-          owner: 'cloud-admin',
-          proximityPlacementGroup: '',
-          ollamaModel: 'llama3'
-      };
+      return DEFAULT_GLOBAL_VARS;
   });
 
   // Project / Code Cart State - Persisted to localStorage
@@ -101,6 +103,16 @@ const App: React.FC = () => {
       }));
   };
 
+  const handleStartOver = () => {
+    if (window.confirm("⚠️ Start Over?\n\nThis will erase your entire Project Plan (End-State) and reset Global Variables to defaults.\n\nAre you sure you want to proceed?")) {
+        setProjectState({ name: '', items: [] });
+        setGlobalVars(DEFAULT_GLOBAL_VARS);
+        setActiveScenario(null);
+        setCurrentView(ViewState.CATALOG);
+        setCurrentCategory(null);
+    }
+  };
+
   // Auto-save globalVars to localStorage whenever they change
   useEffect(() => {
       localStorage.setItem('azureMate_globalVars', JSON.stringify(globalVars));
@@ -125,6 +137,7 @@ const App: React.FC = () => {
         projectName={projectState.name}
         projectItemCount={projectState.items.length}
         onAutoPopulate={handleAutoPopulate}
+        onStartOver={handleStartOver}
       />
       
       <main className="flex-1 overflow-hidden relative">

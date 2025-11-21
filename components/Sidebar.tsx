@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { AzureCategory, ViewState, AzureContext, ServiceHealth } from '../types';
 import { fetchAzureStatus, sortServiceHealth } from '../services/azureStatusService';
@@ -23,7 +22,8 @@ import {
   AlertTriangle,
   XCircle,
   Loader2,
-  ShieldCheck
+  ShieldCheck,
+  Trash2
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -38,6 +38,7 @@ interface SidebarProps {
   projectName?: string;
   projectItemCount?: number;
   onAutoPopulate: (location: string, env: string, owner: string) => void;
+  onStartOver: () => void;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ 
@@ -51,7 +52,8 @@ const Sidebar: React.FC<SidebarProps> = ({
   onResetWizard,
   projectName,
   projectItemCount,
-  onAutoPopulate
+  onAutoPopulate,
+  onStartOver
 }) => {
   const [showWizard, setShowWizard] = useState(false);
   
@@ -264,6 +266,17 @@ const Sidebar: React.FC<SidebarProps> = ({
             ))}
           </div>
         </div>
+      </div>
+
+      {/* Start Over Button */}
+      <div className="px-4 py-3 border-t border-slate-800 bg-slate-900/20">
+          <button 
+            onClick={onStartOver}
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-xs font-bold text-red-400 hover:bg-red-950/30 hover:text-red-300 transition-all border border-transparent hover:border-red-900/50 group"
+          >
+            <Trash2 className="w-4 h-4 group-hover:animate-bounce" />
+            Start Over
+          </button>
       </div>
 
       {/* System Status Footer */}
