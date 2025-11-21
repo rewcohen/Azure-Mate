@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Scenario, GeneratedResult, AzureCategory, AzureContext, GlobalVariables, CostBreakdown, SavedDeploymentItem } from '../types';
 import { SCENARIOS } from '../constants';
-import { generateConfig } from '../services/geminiService';
+import { generateConfig } from '../services/ollamaService';
 import { generateScriptFromTemplate, processDiagramTemplate } from '../services/templateEngine';
 import { calculateScenarioCost } from '../services/pricingService';
 import ScriptDisplay from './ScriptDisplay';
