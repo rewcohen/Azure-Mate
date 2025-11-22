@@ -1,4 +1,8 @@
-import { IPublicClientApplication, AccountInfo, InteractionRequiredAuthError } from '@azure/msal-browser';
+import {
+  IPublicClientApplication,
+  AccountInfo,
+  InteractionRequiredAuthError,
+} from '@azure/msal-browser';
 import { apiEndpoints } from '../config/authConfig';
 
 /**
@@ -9,7 +13,8 @@ import { apiEndpoints } from '../config/authConfig';
  */
 
 // Cloud Shell API endpoints
-const CLOUD_SHELL_API = 'https://management.azure.com/providers/Microsoft.Portal';
+const CLOUD_SHELL_API =
+  'https://management.azure.com/providers/Microsoft.Portal';
 const CLOUD_SHELL_CONSOLE_API = `${CLOUD_SHELL_API}/consoles/default`;
 
 // Cloud Shell settings
@@ -41,7 +46,10 @@ export interface ExecutionResult {
 }
 
 // Output callback for streaming
-export type OutputCallback = (output: string, type: 'stdout' | 'stderr' | 'info' | 'error') => void;
+export type OutputCallback = (
+  output: string,
+  type: 'stdout' | 'stderr' | 'info' | 'error'
+) => void;
 
 /**
  * Get access token for Azure management
@@ -81,7 +89,7 @@ export async function checkCloudShellStatus(
       `${CLOUD_SHELL_API}/userSettings/cloudConsole?api-version=2023-02-01-preview`,
       {
         headers: {
-          'Authorization': `Bearer ${token}`,
+          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
       }
@@ -126,7 +134,7 @@ export async function requestCloudShellConsole(
     {
       method: 'PUT',
       headers: {
-        'Authorization': `Bearer ${token}`,
+        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -139,7 +147,9 @@ export async function requestCloudShellConsole(
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`Failed to request Cloud Shell console: ${response.status} - ${errorText}`);
+    throw new Error(
+      `Failed to request Cloud Shell console: ${response.status} - ${errorText}`
+    );
   }
 
   return response.json();
@@ -161,7 +171,7 @@ export async function getTerminalUri(
     {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${token}`,
+        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
     }
@@ -169,7 +179,9 @@ export async function getTerminalUri(
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`Failed to get terminal: ${response.status} - ${errorText}`);
+    throw new Error(
+      `Failed to get terminal: ${response.status} - ${errorText}`
+    );
   }
 
   const data = await response.json();
@@ -205,16 +217,26 @@ export class CloudShellSession {
       this.emit('info', 'Provisioning Azure Cloud Shell...');
 
       // Request console
-      const console = await requestCloudShellConsole(this.msalInstance, this.account, 'pwsh');
+      const console = await requestCloudShellConsole(
+        this.msalInstance,
+        this.account,
+        'pwsh'
+      );
 
       if (console.properties.provisioningState !== 'Succeeded') {
-        throw new Error(`Console provisioning failed: ${console.properties.provisioningState}`);
+        throw new Error(
+          `Console provisioning failed: ${console.properties.provisioningState}`
+        );
       }
 
       this.emit('info', 'Cloud Shell provisioned. Connecting to terminal...');
 
       // Get terminal WebSocket URI
-      const socketUri = await getTerminalUri(this.msalInstance, this.account, console.properties.uri);
+      const socketUri = await getTerminalUri(
+        this.msalInstance,
+        this.account,
+        console.properties.uri
+      );
 
       // Connect WebSocket
       await this.connectWebSocket(socketUri);
@@ -283,12 +305,12 @@ export class CloudShellSession {
     this.emit('info', 'Executing script...');
 
     // Split script into lines and execute
-    const lines = script.split('\n').filter(line => line.trim());
+    const lines = script.split('\n').filter((line) => line.trim());
 
     for (const line of lines) {
       await this.sendCommand(line);
       // Small delay between commands
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, 100));
     }
   }
 
@@ -307,7 +329,10 @@ export class CloudShellSession {
   /**
    * Emit output to callback
    */
-  private emit(type: 'stdout' | 'stderr' | 'info' | 'error', message: string): void {
+  private emit(
+    type: 'stdout' | 'stderr' | 'info' | 'error',
+    message: string
+  ): void {
     if (this.outputCallback) {
       this.outputCallback(message, type);
     }
@@ -341,7 +366,12 @@ export async function executeViaRestApi(
   account: AccountInfo,
   subscriptionId: string,
   resourceGroupName: string,
-  resources: Array<{ type: string; name: string; properties: any; location: string }>,
+  resources: Array<{
+    type: string;
+    name: string;
+    properties: any;
+    location: string;
+  }>,
   onOutput: OutputCallback
 ): Promise<ExecutionResult> {
   const token = await getAccessToken(msalInstance, account);
@@ -358,7 +388,7 @@ export async function executeViaRestApi(
       {
         method: 'PUT',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -372,7 +402,10 @@ export async function executeViaRestApi(
       throw new Error(`Failed to create resource group: ${errorText}`);
     }
 
-    onOutput(`Resource group '${resourceGroupName}' created successfully`, 'stdout');
+    onOutput(
+      `Resource group '${resourceGroupName}' created successfully`,
+      'stdout'
+    );
     output += `Resource group '${resourceGroupName}' created\n`;
 
     // Create each resource
@@ -384,7 +417,7 @@ export async function executeViaRestApi(
         {
           method: 'PUT',
           headers: {
-            'Authorization': `Bearer ${token}`,
+            Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
@@ -400,7 +433,10 @@ export async function executeViaRestApi(
         error += `Failed to create ${resource.name}: ${errorText}\n`;
         success = false;
       } else {
-        onOutput(`${resource.type} '${resource.name}' created successfully`, 'stdout');
+        onOutput(
+          `${resource.type} '${resource.name}' created successfully`,
+          'stdout'
+        );
         output += `${resource.type} '${resource.name}' created\n`;
       }
     }

@@ -71,6 +71,7 @@ You'll need these for the `.env` file.
     - ✅ **user_impersonation** (Access Azure Service Management as organization users)
 
 ### Summary of Permissions:
+
 - `User.Read` - Read signed-in user's profile
 - `offline_access` - Refresh tokens for persistent sessions
 - `https://management.azure.com/user_impersonation` - Access Azure Resource Manager APIs
@@ -80,14 +81,17 @@ You'll need these for the `.env` file.
 These permissions require admin consent for best experience:
 
 ### Option A: Admin Consent URL (Recommended)
+
 1. Click **API permissions**
 2. Click **Grant admin consent for [Your Organization]** (requires Global Admin role)
 3. Click **Yes** to confirm
 
 ### Option B: Self-Service Admin Consent Flow
+
 If you don't grant consent now, the app will request it during first login. Global Administrators will see an admin consent prompt and can approve on behalf of their organization.
 
 **Admin Consent URL Format:**
+
 ```
 https://login.microsoftonline.com/organizations/adminconsent
   ?client_id=YOUR_CLIENT_ID
@@ -125,6 +129,7 @@ VITE_AZURE_REQUIRE_ADMIN_CONSENT=false
 Replace `YOUR_APPLICATION_CLIENT_ID_HERE` with the Application (client) ID from Step 2.
 
 **Important Notes:**
+
 - Use `VITE_` prefix for environment variables in Vite
 - `VITE_AZURE_TENANT_ID=organizations` enables multi-tenant support
 - For single-tenant, use your specific tenant ID instead
@@ -148,6 +153,7 @@ When deploying to production:
    - Other hosts: Follow their environment variable documentation
 
 Example Docker Compose with environment variables:
+
 ```yaml
 environment:
   - VITE_AZURE_CLIENT_ID=${AZURE_CLIENT_ID}
@@ -167,18 +173,22 @@ environment:
 ## Troubleshooting
 
 ### "AADSTS50011: The redirect URI specified in the request does not match..."
+
 - Check that your redirect URI in the code matches exactly what's registered in Azure Portal
 - Ensure there are no trailing slashes or typos
 
 ### "AADSTS65001: The user or administrator has not consented..."
+
 - Run the admin consent URL from Step 5
 - Or have a Global Administrator sign in and consent during first use
 
 ### "AADSTS700016: Application not found in the directory"
+
 - Verify your Client ID is correct in the `.env` file
 - Ensure the app registration hasn't been deleted
 
 ### Users from other organizations can't sign in
+
 - Verify "Accounts in any organizational directory (Multitenant)" was selected
 - Check that tenant ID is set to "organizations" not a specific tenant
 
@@ -194,6 +204,7 @@ environment:
 ## Next Steps
 
 After completing this setup:
+
 1. Install the required npm packages (MSAL, Azure SDKs)
 2. Configure MSAL in your application
 3. Implement authentication flows

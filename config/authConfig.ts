@@ -1,4 +1,9 @@
-import { Configuration, LogLevel, PopupRequest, RedirectRequest } from '@azure/msal-browser';
+import {
+  Configuration,
+  LogLevel,
+  PopupRequest,
+  RedirectRequest,
+} from '@azure/msal-browser';
 
 /**
  * MSAL Configuration for Azure Architect Mate
@@ -14,9 +19,10 @@ import { Configuration, LogLevel, PopupRequest, RedirectRequest } from '@azure/m
 // Check for localStorage override first (set by the setup wizard)
 const getClientId = (): string => {
   // Check localStorage for user-provided client ID (from setup wizard)
-  const localStorageClientId = typeof window !== 'undefined'
-    ? localStorage.getItem('azure_client_id_override')
-    : null;
+  const localStorageClientId =
+    typeof window !== 'undefined'
+      ? localStorage.getItem('azure_client_id_override')
+      : null;
 
   if (localStorageClientId && localStorageClientId.trim()) {
     return localStorageClientId.trim();
@@ -28,13 +34,14 @@ const getClientId = (): string => {
 
 const clientId = getClientId();
 const tenantId = import.meta.env.VITE_AZURE_TENANT_ID || 'organizations'; // 'organizations' for multi-tenant
-const redirectUri = import.meta.env.VITE_AZURE_REDIRECT_URI || window.location.origin;
+const redirectUri =
+  import.meta.env.VITE_AZURE_REDIRECT_URI || window.location.origin;
 
 // Validate configuration
 if (!clientId) {
   console.warn(
     '⚠️ Azure AD Client ID not configured. Please set VITE_AZURE_CLIENT_ID in your .env file.\n' +
-    'See AZURE_AD_SETUP.md for instructions on creating an App Registration.'
+      'See AZURE_AD_SETUP.md for instructions on creating an App Registration.'
   );
 }
 
@@ -60,7 +67,11 @@ export const msalConfig: Configuration = {
   },
   system: {
     loggerOptions: {
-      loggerCallback: (level: LogLevel, message: string, containsPii: boolean) => {
+      loggerCallback: (
+        level: LogLevel,
+        message: string,
+        containsPii: boolean
+      ) => {
         if (containsPii) {
           return; // Don't log PII
         }
@@ -123,10 +134,7 @@ export const cloudShellScopes = {
  * Requests both Graph and Azure Management scopes
  */
 export const loginRequest: PopupRequest = {
-  scopes: [
-    ...graphScopes.userRead,
-    ...azureManagementScopes.userImpersonation,
-  ],
+  scopes: [...graphScopes.userRead, ...azureManagementScopes.userImpersonation],
   prompt: 'select_account', // Always show account picker
 };
 
@@ -135,10 +143,7 @@ export const loginRequest: PopupRequest = {
  * Use this when a Global Administrator needs to consent on behalf of their organization
  */
 export const adminConsentRequest: PopupRequest = {
-  scopes: [
-    ...graphScopes.userRead,
-    ...azureManagementScopes.userImpersonation,
-  ],
+  scopes: [...graphScopes.userRead, ...azureManagementScopes.userImpersonation],
   prompt: 'consent', // Force consent prompt
   extraQueryParameters: {
     // Request admin consent for the entire organization
@@ -167,10 +172,7 @@ export const graphTokenRequest = {
  * Use this if popups are blocked or for mobile devices
  */
 export const redirectRequest: RedirectRequest = {
-  scopes: [
-    ...graphScopes.userRead,
-    ...azureManagementScopes.userImpersonation,
-  ],
+  scopes: [...graphScopes.userRead, ...azureManagementScopes.userImpersonation],
   prompt: 'select_account',
 };
 

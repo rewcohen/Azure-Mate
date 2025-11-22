@@ -13,6 +13,7 @@ Azure Architect Mate is a React-based web application that helps users generate 
 - Docker (optional)
 
 **Setup commands:**
+
 ```bash
 npm install
 npm run dev      # Start development server on port 3000
@@ -21,6 +22,7 @@ npm run preview  # Preview production build
 ```
 
 **Docker commands:**
+
 ```bash
 docker build -t azure-architect-mate:latest .        # Build Docker image
 docker run -d -p 3000:80 azure-architect-mate:latest # Run container
@@ -86,6 +88,7 @@ The application uses React's built-in state management with `useState` and `useE
 ### Scenario Definition
 
 Scenarios are defined in `constants.ts` with the following structure:
+
 - `id`: Unique identifier
 - `category`: AzureCategory enum value
 - `title` and `description`: Display information
@@ -113,6 +116,7 @@ Three levels of variables are substituted into templates:
 ## TypeScript Configuration
 
 The project uses strict TypeScript with the following key settings:
+
 - Target: ES2020
 - Module: ESNext with bundler resolution
 - JSX: react-jsx (React 18 automatic runtime)
@@ -123,10 +127,12 @@ The project uses strict TypeScript with the following key settings:
 ## Docker Configuration
 
 The project uses a multi-stage Docker build:
+
 1. **Builder stage**: Node 18 Alpine builds the Vite application
 2. **Production stage**: Nginx Alpine serves static files
 
 Key files:
+
 - `Dockerfile`: Multi-stage build configuration
 - `nginx.conf`: Nginx configuration with gzip, caching, and security headers
 - `.dockerignore`: Excludes node_modules, dist, and development files

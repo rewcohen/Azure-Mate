@@ -1,5 +1,3 @@
-
-
 export enum AzureCategory {
   COMPUTE = 'Compute',
   NETWORKING = 'Networking',
@@ -11,7 +9,7 @@ export enum AzureCategory {
   SECURITY = 'Security',
   CONTAINERS = 'Containers',
   INTEGRATION = 'Integration',
-  TROUBLESHOOT = 'Troubleshoot'
+  TROUBLESHOOT = 'Troubleshoot',
 }
 
 export interface WizardInput {
@@ -34,23 +32,23 @@ export interface Scenario {
   title: string;
   category: AzureCategory;
   description: string;
-  
+
   // Wizard & Template Fields
   inputs: WizardInput[];
   scriptTemplate: string; // PowerShell template with {{variable}} placeholders
-  diagramCode: string;    // Mermaid diagram definition
+  diagramCode: string; // Mermaid diagram definition
   learnLinks: LearnLink[];
-  
+
   // New Explanation Fields
   whatItDoes: string[];
   limitations: string[];
   commonIssues: string[]; // Pitfalls and common deployment errors
-  
+
   // Dependencies - List of Scenario IDs that are prerequisites
   prerequisites?: string[];
-  
+
   // For LLM fallback or custom scenarios
-  defaultPrompt?: string; 
+  defaultPrompt?: string;
 }
 
 export interface GeneratedResult {
@@ -66,7 +64,7 @@ export enum ViewState {
   GENERATOR = 'GENERATOR',
   TROUBLESHOOTER = 'TROUBLESHOOTER',
   VARIABLES = 'VARIABLES',
-  END_STATE = 'END_STATE'
+  END_STATE = 'END_STATE',
 }
 
 export interface ChatMessage {
@@ -128,12 +126,16 @@ export interface ProjectState {
 }
 
 // System Status Types
-export type ServiceStatusLevel = 'Available' | 'Warning' | 'Critical' | 'Information';
+export type ServiceStatusLevel =
+  | 'Available'
+  | 'Warning'
+  | 'Critical'
+  | 'Information';
 
 export interface ServiceHealth {
   name: string;
   category: string; // e.g., Compute, Networking
-  region: string;   // e.g., Global, East US
+  region: string; // e.g., Global, East US
   status: ServiceStatusLevel;
   updated: string;
   message?: string;
@@ -147,7 +149,7 @@ export interface ResourceNode {
   location: string;
   tags?: Record<string, string>;
   properties: Record<string, any>;
-  dependsOn?: string[]; 
+  dependsOn?: string[];
 }
 
 export interface AuditIssue {

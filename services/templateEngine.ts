@@ -1,9 +1,8 @@
-
-import { WizardInput, AzureContext, GlobalVariables } from "../types";
+import { WizardInput, AzureContext, GlobalVariables } from '../types';
 
 /**
  * Generates a valid PowerShell script by substituting variables into a template.
- * 
+ *
  * @param template - The raw PowerShell template string containing {{placeholders}}.
  * @param inputs - The definition of inputs required by the specific scenario wizard.
  * @param values - The actual values provided by the user in the wizard form.
@@ -27,15 +26,18 @@ export const generateScriptFromTemplate = (
   script = script.split('{{location}}').join(globalVars.location);
   script = script.split('{{costCenter}}').join(globalVars.costCenter);
   script = script.split('{{owner}}').join(globalVars.owner);
-  
+
   // Handle optional PPG - if empty, it remains empty string in script which logic handles
-  script = script.split('{{proximityPlacementGroup}}').join(globalVars.proximityPlacementGroup || '');
+  script = script
+    .split('{{proximityPlacementGroup}}')
+    .join(globalVars.proximityPlacementGroup || '');
 
   // 2. Replace Wizard Inputs
   // These are specific to the selected scenario (e.g., VM Name, Node Count)
-  inputs.forEach(input => {
+  inputs.forEach((input) => {
     const key = `{{${input.id}}}`;
-    const value = values[input.id] !== undefined ? values[input.id] : input.defaultValue;
+    const value =
+      values[input.id] !== undefined ? values[input.id] : input.defaultValue;
     // Global replacement
     script = script.split(key).join(String(value));
   });
@@ -59,23 +61,24 @@ export const generateScriptFromTemplate = (
  * This allows the architecture diagram to reflect the user's actual configuration.
  */
 export const processDiagramTemplate = (
-    diagramCode: string,
-    inputs: WizardInput[],
-    values: Record<string, string | number | boolean>,
-    globalVars: GlobalVariables
+  diagramCode: string,
+  inputs: WizardInput[],
+  values: Record<string, string | number | boolean>,
+  globalVars: GlobalVariables
 ): string => {
-    let code = diagramCode;
+  let code = diagramCode;
 
-    // Replace globals in diagram
-    code = code.split('{{projectPrefix}}').join(globalVars.projectPrefix);
-    code = code.split('{{environment}}').join(globalVars.environment);
-    code = code.split('{{location}}').join(globalVars.location);
+  // Replace globals in diagram
+  code = code.split('{{projectPrefix}}').join(globalVars.projectPrefix);
+  code = code.split('{{environment}}').join(globalVars.environment);
+  code = code.split('{{location}}').join(globalVars.location);
 
-    // Replace wizard specific inputs
-    inputs.forEach(input => {
-        const key = `{{${input.id}}}`;
-        const value = values[input.id] !== undefined ? values[input.id] : input.defaultValue;
-        code = code.split(key).join(String(value));
-    });
-    return code;
-}
+  // Replace wizard specific inputs
+  inputs.forEach((input) => {
+    const key = `{{${input.id}}}`;
+    const value =
+      values[input.id] !== undefined ? values[input.id] : input.defaultValue;
+    code = code.split(key).join(String(value));
+  });
+  return code;
+};

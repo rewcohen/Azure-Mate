@@ -1,5 +1,5 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -8,7 +8,7 @@ export default defineConfig({
   base: './',
   server: {
     port: 3000,
-    host: true
+    host: true,
   },
   build: {
     // Output to dist folder
@@ -17,5 +17,5 @@ export default defineConfig({
     sourcemap: false,
     // Optimize chunk size
     chunkSizeWarningLimit: 1000,
-  }
-})
+  },
+});

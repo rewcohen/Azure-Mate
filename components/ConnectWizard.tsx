@@ -3,13 +3,43 @@ import { useMsal, useAccount } from '@azure/msal-react';
 import { AccountInfo, InteractionStatus } from '@azure/msal-browser';
 import { AzureContext } from '../types';
 import {
-  ShieldCheck, Loader2, User, CheckCircle2, X, Globe, Lock,
-  ChevronRight, AlertCircle, UserPlus, LogIn, Building2, RefreshCw,
-  Copy, ExternalLink, Terminal, FileCode, BookOpen, ChevronLeft,
-  Zap, Settings, CheckCircle, XCircle, Info
+  ShieldCheck,
+  Loader2,
+  User,
+  CheckCircle2,
+  X,
+  Globe,
+  Lock,
+  ChevronRight,
+  AlertCircle,
+  UserPlus,
+  LogIn,
+  Building2,
+  RefreshCw,
+  Copy,
+  ExternalLink,
+  Terminal,
+  FileCode,
+  BookOpen,
+  ChevronLeft,
+  Zap,
+  Settings,
+  CheckCircle,
+  XCircle,
+  Info,
 } from 'lucide-react';
-import { loginRequest, adminConsentRequest, isConfigured, buildAdminConsentUrl } from '../config/authConfig';
-import { listSubscriptions, getUserProfile, AzureSubscription, validateSubscriptionAccess } from '../services/azureService';
+import {
+  loginRequest,
+  adminConsentRequest,
+  isConfigured,
+  buildAdminConsentUrl,
+} from '../config/authConfig';
+import {
+  listSubscriptions,
+  getUserProfile,
+  AzureSubscription,
+  validateSubscriptionAccess,
+} from '../services/azureService';
 import {
   generateAppRegistrationScript,
   generateAzureCliScript,
@@ -17,7 +47,7 @@ import {
   isValidClientIdFormat,
   getCloudShellLink,
   getAppRegistrationPortalLink,
-  defaultAppConfig
+  defaultAppConfig,
 } from '../services/appRegistrationService';
 
 interface ConnectWizardProps {
@@ -26,16 +56,35 @@ interface ConnectWizardProps {
   onAutoPopulate: (location: string, env: string, owner: string) => void;
 }
 
-type WizardStep = 'setup-choice' | 'setup-script' | 'setup-manual' | 'setup-clientid' | 'accounts' | 'authenticating' | 'subscriptions' | 'verifying' | 'success' | 'error';
+type WizardStep =
+  | 'setup-choice'
+  | 'setup-script'
+  | 'setup-manual'
+  | 'setup-clientid'
+  | 'accounts'
+  | 'authenticating'
+  | 'subscriptions'
+  | 'verifying'
+  | 'success'
+  | 'error';
 type ScriptType = 'powershell' | 'bash';
 
-const ConnectWizard: React.FC<ConnectWizardProps> = ({ onClose, onConnect, onAutoPopulate }) => {
+const ConnectWizard: React.FC<ConnectWizardProps> = ({
+  onClose,
+  onConnect,
+  onAutoPopulate,
+}) => {
   const { instance, accounts, inProgress } = useMsal();
   const [step, setStep] = useState<WizardStep>('accounts');
-  const [selectedAccount, setSelectedAccount] = useState<AccountInfo | null>(null);
+  const [selectedAccount, setSelectedAccount] = useState<AccountInfo | null>(
+    null
+  );
   const [subscriptions, setSubscriptions] = useState<AzureSubscription[]>([]);
   const [selectedSub, setSelectedSub] = useState<string>('');
-  const [userProfile, setUserProfile] = useState<{ displayName: string; email: string } | null>(null);
+  const [userProfile, setUserProfile] = useState<{
+    displayName: string;
+    email: string;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -73,9 +122,10 @@ const ConnectWizard: React.FC<ConnectWizardProps> = ({ onClose, onConnect, onAut
 
   // Copy script to clipboard
   const handleCopyScript = async () => {
-    const script = scriptType === 'powershell'
-      ? generateAppRegistrationScript(defaultAppConfig)
-      : generateAzureCliScript(defaultAppConfig);
+    const script =
+      scriptType === 'powershell'
+        ? generateAppRegistrationScript(defaultAppConfig)
+        : generateAzureCliScript(defaultAppConfig);
 
     await navigator.clipboard.writeText(script);
     setCopied(true);
@@ -92,7 +142,9 @@ const ConnectWizard: React.FC<ConnectWizardProps> = ({ onClose, onConnect, onAut
     }
 
     if (!isValidClientIdFormat(trimmedId)) {
-      setClientIdError('Invalid Client ID format. It should be a GUID (e.g., xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)');
+      setClientIdError(
+        'Invalid Client ID format. It should be a GUID (e.g., xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)'
+      );
       return;
     }
 
@@ -101,115 +153,133 @@ const ConnectWizard: React.FC<ConnectWizardProps> = ({ onClose, onConnect, onAut
 
     // Show message and prompt refresh
     setClientIdError(null);
-    alert('Client ID saved! The page will now refresh to apply the new configuration.');
+    alert(
+      'Client ID saved! The page will now refresh to apply the new configuration.'
+    );
     window.location.reload();
   };
 
   // Handle account selection and login
-  const handleAccountSelect = useCallback(async (account: AccountInfo | null, isNewLogin: boolean = false) => {
-    setError(null);
-    setIsLoading(true);
-    setStep('authenticating');
+  const handleAccountSelect = useCallback(
+    async (account: AccountInfo | null, isNewLogin: boolean = false) => {
+      setError(null);
+      setIsLoading(true);
+      setStep('authenticating');
 
-    try {
-      let activeAccount = account;
+      try {
+        let activeAccount = account;
 
-      if (isNewLogin || !account) {
-        // Initiate login with account picker
-        const response = await instance.loginPopup({
-          ...loginRequest,
-          prompt: 'select_account', // Always show account picker for new login
-        });
-        activeAccount = response.account;
-      } else {
-        // Use existing account, try silent token acquisition
-        instance.setActiveAccount(account);
-        try {
-          await instance.acquireTokenSilent({
-            ...loginRequest,
-            account: account,
-          });
-          activeAccount = account;
-        } catch {
-          // Silent failed, do interactive login
+        if (isNewLogin || !account) {
+          // Initiate login with account picker
           const response = await instance.loginPopup({
             ...loginRequest,
-            account: account,
+            prompt: 'select_account', // Always show account picker for new login
           });
           activeAccount = response.account;
-        }
-      }
-
-      if (!activeAccount) {
-        throw new Error('No account selected');
-      }
-
-      setSelectedAccount(activeAccount);
-      instance.setActiveAccount(activeAccount);
-
-      // Start verification
-      setStep('verifying');
-      setVerificationStatus({
-        tokenAcquisition: 'success',
-        graphApi: 'pending',
-        azureApi: 'pending',
-      });
-
-      // Fetch user profile
-      try {
-        const profile = await getUserProfile(instance, activeAccount);
-        setUserProfile({
-          displayName: profile.displayName,
-          email: profile.userPrincipalName || profile.mail || activeAccount.username || '',
-        });
-        setVerificationStatus(prev => ({ ...prev, graphApi: 'success' }));
-      } catch {
-        // Fallback to account info if Graph call fails
-        setUserProfile({
-          displayName: activeAccount.name || 'User',
-          email: activeAccount.username || '',
-        });
-        setVerificationStatus(prev => ({ ...prev, graphApi: 'error' }));
-      }
-
-      // Fetch subscriptions
-      try {
-        const subs = await listSubscriptions(instance, activeAccount);
-        setSubscriptions(subs);
-        setVerificationStatus(prev => ({ ...prev, azureApi: 'success' }));
-
-        if (subs.length > 0) {
-          setSelectedSub(subs[0].subscriptionId);
-          setStep('subscriptions');
         } else {
-          setError('No Azure subscriptions found. Please ensure your account has access to Azure subscriptions.');
+          // Use existing account, try silent token acquisition
+          instance.setActiveAccount(account);
+          try {
+            await instance.acquireTokenSilent({
+              ...loginRequest,
+              account: account,
+            });
+            activeAccount = account;
+          } catch {
+            // Silent failed, do interactive login
+            const response = await instance.loginPopup({
+              ...loginRequest,
+              account: account,
+            });
+            activeAccount = response.account;
+          }
+        }
+
+        if (!activeAccount) {
+          throw new Error('No account selected');
+        }
+
+        setSelectedAccount(activeAccount);
+        instance.setActiveAccount(activeAccount);
+
+        // Start verification
+        setStep('verifying');
+        setVerificationStatus({
+          tokenAcquisition: 'success',
+          graphApi: 'pending',
+          azureApi: 'pending',
+        });
+
+        // Fetch user profile
+        try {
+          const profile = await getUserProfile(instance, activeAccount);
+          setUserProfile({
+            displayName: profile.displayName,
+            email:
+              profile.userPrincipalName ||
+              profile.mail ||
+              activeAccount.username ||
+              '',
+          });
+          setVerificationStatus((prev) => ({ ...prev, graphApi: 'success' }));
+        } catch {
+          // Fallback to account info if Graph call fails
+          setUserProfile({
+            displayName: activeAccount.name || 'User',
+            email: activeAccount.username || '',
+          });
+          setVerificationStatus((prev) => ({ ...prev, graphApi: 'error' }));
+        }
+
+        // Fetch subscriptions
+        try {
+          const subs = await listSubscriptions(instance, activeAccount);
+          setSubscriptions(subs);
+          setVerificationStatus((prev) => ({ ...prev, azureApi: 'success' }));
+
+          if (subs.length > 0) {
+            setSelectedSub(subs[0].subscriptionId);
+            setStep('subscriptions');
+          } else {
+            setError(
+              'No Azure subscriptions found. Please ensure your account has access to Azure subscriptions.'
+            );
+            setStep('error');
+          }
+        } catch (apiError: any) {
+          setVerificationStatus((prev) => ({ ...prev, azureApi: 'error' }));
+          throw apiError;
+        }
+      } catch (err: any) {
+        console.error('Authentication error:', err);
+
+        // Handle specific errors
+        if (err.errorCode === 'user_cancelled') {
+          setStep('accounts');
+          setError(null);
+        } else if (
+          err.errorCode === 'consent_required' ||
+          err.message?.includes('AADSTS65001')
+        ) {
+          setError(
+            'Admin consent required. Please have a Global Administrator sign in and approve the permissions, or use the Admin Consent link below.'
+          );
+          setStep('error');
+        } else if (err.errorCode === 'interaction_in_progress') {
+          setError(
+            'Another sign-in is already in progress. Please wait or refresh the page.'
+          );
+          setStep('error');
+        } else {
+          setError(err.message || 'Authentication failed. Please try again.');
           setStep('error');
         }
-      } catch (apiError: any) {
-        setVerificationStatus(prev => ({ ...prev, azureApi: 'error' }));
-        throw apiError;
+      } finally {
+        setIsLoading(false);
       }
-    } catch (err: any) {
-      console.error('Authentication error:', err);
-
-      // Handle specific errors
-      if (err.errorCode === 'user_cancelled') {
-        setStep('accounts');
-        setError(null);
-      } else if (err.errorCode === 'consent_required' || err.message?.includes('AADSTS65001')) {
-        setError('Admin consent required. Please have a Global Administrator sign in and approve the permissions, or use the Admin Consent link below.');
-        setStep('error');
-      } else if (err.errorCode === 'interaction_in_progress') {
-        setError('Another sign-in is already in progress. Please wait or refresh the page.');
-        setStep('error');
-      } else {
-        setError(err.message || 'Authentication failed. Please try again.');
-        setStep('error');
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  }, [instance]);
+    },
+    [instance]
+  );
 
   // Handle admin consent flow
   const handleAdminConsent = async () => {
@@ -238,13 +308,14 @@ const ConnectWizard: React.FC<ConnectWizardProps> = ({ onClose, onConnect, onAut
   const handleFinalize = () => {
     if (!selectedAccount || !selectedSub) return;
 
-    const sub = subscriptions.find(s => s.subscriptionId === selectedSub);
+    const sub = subscriptions.find((s) => s.subscriptionId === selectedSub);
     if (sub) {
       onConnect({
         isConnected: true,
         subscriptionId: sub.subscriptionId,
         tenantId: sub.tenantId,
-        userDisplayName: userProfile?.displayName || selectedAccount.name || 'User',
+        userDisplayName:
+          userProfile?.displayName || selectedAccount.name || 'User',
         username: userProfile?.email || selectedAccount.username || '',
       });
 
@@ -262,7 +333,7 @@ const ConnectWizard: React.FC<ConnectWizardProps> = ({ onClose, onConnect, onAut
   const getInitials = (name: string): string => {
     return name
       .split(' ')
-      .map(n => n[0])
+      .map((n) => n[0])
       .join('')
       .toUpperCase()
       .slice(0, 2);
@@ -271,17 +342,28 @@ const ConnectWizard: React.FC<ConnectWizardProps> = ({ onClose, onConnect, onAut
   // Calculate progress
   const getProgress = (): number => {
     switch (step) {
-      case 'setup-choice': return 5;
-      case 'setup-script': return 15;
-      case 'setup-manual': return 15;
-      case 'setup-clientid': return 25;
-      case 'accounts': return 30;
-      case 'authenticating': return 50;
-      case 'verifying': return 70;
-      case 'subscriptions': return 90;
-      case 'success': return 100;
-      case 'error': return 50;
-      default: return 0;
+      case 'setup-choice':
+        return 5;
+      case 'setup-script':
+        return 15;
+      case 'setup-manual':
+        return 15;
+      case 'setup-clientid':
+        return 25;
+      case 'accounts':
+        return 30;
+      case 'authenticating':
+        return 50;
+      case 'verifying':
+        return 70;
+      case 'subscriptions':
+        return 90;
+      case 'success':
+        return 100;
+      case 'error':
+        return 50;
+      default:
+        return 0;
     }
   };
 
@@ -307,14 +389,15 @@ const ConnectWizard: React.FC<ConnectWizardProps> = ({ onClose, onConnect, onAut
   return (
     <div className="fixed inset-0 z-[100] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
       <div className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col relative">
-
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-800/50">
           <div className="flex items-center gap-2">
             {step.startsWith('setup') ? (
               <>
                 <Settings className="w-5 h-5 text-purple-400" />
-                <h3 className="font-semibold text-white">Setup Azure Connection</h3>
+                <h3 className="font-semibold text-white">
+                  Setup Azure Connection
+                </h3>
               </>
             ) : (
               <>
@@ -323,13 +406,16 @@ const ConnectWizard: React.FC<ConnectWizardProps> = ({ onClose, onConnect, onAut
               </>
             )}
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-white" disabled={isLoading}>
+          <button
+            onClick={onClose}
+            className="text-slate-400 hover:text-white"
+            disabled={isLoading}
+          >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         <div className="p-6 min-h-[400px] max-h-[70vh] overflow-y-auto flex flex-col">
-
           {/* Setup Choice Step */}
           {step === 'setup-choice' && (
             <div className="space-y-4 flex-1">
@@ -337,9 +423,12 @@ const ConnectWizard: React.FC<ConnectWizardProps> = ({ onClose, onConnect, onAut
                 <div className="w-14 h-14 bg-purple-500/10 rounded-full flex items-center justify-center mx-auto">
                   <Zap className="w-7 h-7 text-purple-500" />
                 </div>
-                <h4 className="text-lg font-medium text-white">One-Time Setup Required</h4>
+                <h4 className="text-lg font-medium text-white">
+                  One-Time Setup Required
+                </h4>
                 <p className="text-sm text-slate-400">
-                  To connect to Azure, you need to create an App Registration. Choose your preferred setup method:
+                  To connect to Azure, you need to create an App Registration.
+                  Choose your preferred setup method:
                 </p>
               </div>
 
@@ -354,11 +443,16 @@ const ConnectWizard: React.FC<ConnectWizardProps> = ({ onClose, onConnect, onAut
                   </div>
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold text-white">Automated Script</span>
-                      <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full">Recommended</span>
+                      <span className="text-sm font-semibold text-white">
+                        Automated Script
+                      </span>
+                      <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full">
+                        Recommended
+                      </span>
                     </div>
                     <p className="text-xs text-slate-400 mt-1">
-                      Run a PowerShell or Azure CLI script to automatically create the App Registration
+                      Run a PowerShell or Azure CLI script to automatically
+                      create the App Registration
                     </p>
                   </div>
                   <ChevronRight className="w-5 h-5 text-slate-600 group-hover:text-purple-400 mt-2" />
@@ -373,9 +467,12 @@ const ConnectWizard: React.FC<ConnectWizardProps> = ({ onClose, onConnect, onAut
                     <BookOpen className="w-5 h-5 text-blue-400 group-hover:text-white" />
                   </div>
                   <div className="flex-1">
-                    <div className="text-sm font-semibold text-white">Manual Setup</div>
+                    <div className="text-sm font-semibold text-white">
+                      Manual Setup
+                    </div>
                     <p className="text-xs text-slate-400 mt-1">
-                      Follow step-by-step instructions to create the App Registration in Azure Portal
+                      Follow step-by-step instructions to create the App
+                      Registration in Azure Portal
                     </p>
                   </div>
                   <ChevronRight className="w-5 h-5 text-slate-600 group-hover:text-blue-400 mt-2" />
@@ -390,7 +487,9 @@ const ConnectWizard: React.FC<ConnectWizardProps> = ({ onClose, onConnect, onAut
                     <FileCode className="w-5 h-5 text-slate-400" />
                   </div>
                   <div className="flex-1">
-                    <div className="text-sm font-medium text-slate-300">I already have a Client ID</div>
+                    <div className="text-sm font-medium text-slate-300">
+                      I already have a Client ID
+                    </div>
                     <p className="text-xs text-slate-500 mt-1">
                       Enter your existing App Registration Client ID
                     </p>
@@ -412,7 +511,9 @@ const ConnectWizard: React.FC<ConnectWizardProps> = ({ onClose, onConnect, onAut
               </button>
 
               <div className="text-center space-y-2">
-                <h4 className="text-lg font-medium text-white">Run Setup Script</h4>
+                <h4 className="text-lg font-medium text-white">
+                  Run Setup Script
+                </h4>
                 <p className="text-sm text-slate-400">
                   Copy this script and run it in Azure Cloud Shell
                 </p>
@@ -422,19 +523,21 @@ const ConnectWizard: React.FC<ConnectWizardProps> = ({ onClose, onConnect, onAut
               <div className="flex gap-2 justify-center">
                 <button
                   onClick={() => setScriptType('powershell')}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${scriptType === 'powershell'
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                    scriptType === 'powershell'
                       ? 'bg-blue-600 text-white'
                       : 'bg-slate-800 text-slate-400 hover:text-white'
-                    }`}
+                  }`}
                 >
                   PowerShell
                 </button>
                 <button
                   onClick={() => setScriptType('bash')}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${scriptType === 'bash'
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                    scriptType === 'bash'
                       ? 'bg-blue-600 text-white'
                       : 'bg-slate-800 text-slate-400 hover:text-white'
-                    }`}
+                  }`}
                 >
                   Azure CLI (Bash)
                 </button>
@@ -444,14 +547,17 @@ const ConnectWizard: React.FC<ConnectWizardProps> = ({ onClose, onConnect, onAut
               <div className="flex-1 bg-slate-950 rounded-lg border border-slate-800 overflow-hidden flex flex-col">
                 <div className="flex items-center justify-between px-3 py-2 border-b border-slate-800 bg-slate-900/50">
                   <span className="text-xs text-slate-500 font-mono">
-                    {scriptType === 'powershell' ? 'setup-azuremate.ps1' : 'setup-azuremate.sh'}
+                    {scriptType === 'powershell'
+                      ? 'setup-azuremate.ps1'
+                      : 'setup-azuremate.sh'}
                   </span>
                   <button
                     onClick={handleCopyScript}
-                    className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-all ${copied
+                    className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-all ${
+                      copied
                         ? 'bg-emerald-600 text-white'
                         : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                      }`}
+                    }`}
                   >
                     {copied ? (
                       <>
@@ -473,11 +579,16 @@ const ConnectWizard: React.FC<ConnectWizardProps> = ({ onClose, onConnect, onAut
 
               {/* Instructions */}
               <div className="bg-slate-800/50 rounded-lg p-4 space-y-3">
-                <h5 className="text-sm font-semibold text-white">How to run:</h5>
+                <h5 className="text-sm font-semibold text-white">
+                  How to run:
+                </h5>
                 <ol className="text-xs text-slate-400 space-y-2 list-decimal list-inside">
                   <li>Click the button below to open Azure Cloud Shell</li>
                   <li>Paste the copied script and press Enter</li>
-                  <li>Copy the <strong className="text-white">Client ID</strong> from the output</li>
+                  <li>
+                    Copy the <strong className="text-white">Client ID</strong>{' '}
+                    from the output
+                  </li>
                   <li>Come back here and enter the Client ID</li>
                 </ol>
                 <a
@@ -512,7 +623,9 @@ const ConnectWizard: React.FC<ConnectWizardProps> = ({ onClose, onConnect, onAut
               </button>
 
               <div className="text-center space-y-2">
-                <h4 className="text-lg font-medium text-white">Manual Setup Guide</h4>
+                <h4 className="text-lg font-medium text-white">
+                  Manual Setup Guide
+                </h4>
                 <p className="text-sm text-slate-400">
                   Follow these steps in Azure Portal
                 </p>
@@ -530,8 +643,12 @@ const ConnectWizard: React.FC<ConnectWizardProps> = ({ onClose, onConnect, onAut
                         {instruction.step}
                       </div>
                       <div className="flex-1">
-                        <h5 className="text-sm font-semibold text-white">{instruction.title}</h5>
-                        <p className="text-xs text-slate-400 mt-1">{instruction.description}</p>
+                        <h5 className="text-sm font-semibold text-white">
+                          {instruction.title}
+                        </h5>
+                        <p className="text-xs text-slate-400 mt-1">
+                          {instruction.description}
+                        </p>
                         {instruction.details && (
                           <ul className="text-xs text-slate-300 mt-2 space-y-1 list-disc list-inside">
                             {instruction.details.map((detail, idx) => (
@@ -580,7 +697,9 @@ const ConnectWizard: React.FC<ConnectWizardProps> = ({ onClose, onConnect, onAut
                 <div className="w-12 h-12 bg-blue-500/10 rounded-full flex items-center justify-center mx-auto">
                   <FileCode className="w-6 h-6 text-blue-500" />
                 </div>
-                <h4 className="text-lg font-medium text-white">Enter Client ID</h4>
+                <h4 className="text-lg font-medium text-white">
+                  Enter Client ID
+                </h4>
                 <p className="text-sm text-slate-400">
                   Paste the Application (Client) ID from your App Registration
                 </p>
@@ -598,10 +717,11 @@ const ConnectWizard: React.FC<ConnectWizardProps> = ({ onClose, onConnect, onAut
                     setClientIdError(null);
                   }}
                   placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                  className={`w-full px-4 py-3 bg-slate-800 border rounded-lg text-white font-mono text-sm focus:outline-none focus:ring-2 transition-all ${clientIdError
+                  className={`w-full px-4 py-3 bg-slate-800 border rounded-lg text-white font-mono text-sm focus:outline-none focus:ring-2 transition-all ${
+                    clientIdError
                       ? 'border-red-500 focus:ring-red-500/50'
                       : 'border-slate-700 focus:ring-blue-500/50 focus:border-blue-500'
-                    }`}
+                  }`}
                 />
                 {clientIdError && (
                   <p className="text-xs text-red-400 flex items-center gap-1">
@@ -614,7 +734,9 @@ const ConnectWizard: React.FC<ConnectWizardProps> = ({ onClose, onConnect, onAut
               <div className="bg-slate-800/50 rounded-lg p-3 flex items-start gap-2">
                 <Info className="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" />
                 <p className="text-xs text-slate-400">
-                  The Client ID is saved locally in your browser. You can find it on the Overview page of your App Registration in Azure Portal.
+                  The Client ID is saved locally in your browser. You can find
+                  it on the Overview page of your App Registration in Azure
+                  Portal.
                 </p>
               </div>
 
@@ -635,7 +757,9 @@ const ConnectWizard: React.FC<ConnectWizardProps> = ({ onClose, onConnect, onAut
                 <div className="w-12 h-12 bg-blue-500/10 rounded-full flex items-center justify-center mx-auto">
                   <Lock className="w-6 h-6 text-blue-500" />
                 </div>
-                <h4 className="text-lg font-medium text-white">Sign in with Microsoft</h4>
+                <h4 className="text-lg font-medium text-white">
+                  Sign in with Microsoft
+                </h4>
                 <p className="text-sm text-slate-400">
                   Choose an account to connect to your Azure subscriptions.
                 </p>
@@ -657,8 +781,12 @@ const ConnectWizard: React.FC<ConnectWizardProps> = ({ onClose, onConnect, onAut
                         {getInitials(account.name || 'U')}
                       </div>
                       <div className="flex-1 text-left">
-                        <div className="text-sm font-medium text-white">{account.name || 'User'}</div>
-                        <div className="text-xs text-slate-400">{account.username}</div>
+                        <div className="text-sm font-medium text-white">
+                          {account.name || 'User'}
+                        </div>
+                        <div className="text-xs text-slate-400">
+                          {account.username}
+                        </div>
                       </div>
                       <ChevronRight className="w-4 h-4 text-slate-600 group-hover:text-blue-400" />
                     </button>
@@ -681,8 +809,12 @@ const ConnectWizard: React.FC<ConnectWizardProps> = ({ onClose, onConnect, onAut
                     <UserPlus className="w-5 h-5 text-slate-300 group-hover:text-white" />
                   </div>
                   <div className="flex-1 text-left">
-                    <div className="text-sm font-medium text-white">Sign in with another account</div>
-                    <div className="text-xs text-slate-400">Use a different Microsoft 365 account</div>
+                    <div className="text-sm font-medium text-white">
+                      Sign in with another account
+                    </div>
+                    <div className="text-xs text-slate-400">
+                      Use a different Microsoft 365 account
+                    </div>
                   </div>
                   <ChevronRight className="w-4 h-4 text-slate-600 group-hover:text-blue-400" />
                 </button>
@@ -698,8 +830,12 @@ const ConnectWizard: React.FC<ConnectWizardProps> = ({ onClose, onConnect, onAut
                     <ShieldCheck className="w-5 h-5 text-amber-400" />
                   </div>
                   <div className="flex-1 text-left">
-                    <div className="text-sm font-medium text-white">Admin Consent</div>
-                    <div className="text-xs text-slate-400">Global Admin: Approve for your organization</div>
+                    <div className="text-sm font-medium text-white">
+                      Admin Consent
+                    </div>
+                    <div className="text-xs text-slate-400">
+                      Global Admin: Approve for your organization
+                    </div>
                   </div>
                 </button>
               </div>
@@ -726,8 +862,12 @@ const ConnectWizard: React.FC<ConnectWizardProps> = ({ onClose, onConnect, onAut
                 <Loader2 className="w-12 h-12 text-blue-500 animate-spin relative z-10" />
               </div>
               <div>
-                <h4 className="text-lg font-medium text-white">Authenticating...</h4>
-                <p className="text-sm text-slate-400">Please complete sign-in in the popup window.</p>
+                <h4 className="text-lg font-medium text-white">
+                  Authenticating...
+                </h4>
+                <p className="text-sm text-slate-400">
+                  Please complete sign-in in the popup window.
+                </p>
               </div>
             </div>
           )}
@@ -740,22 +880,32 @@ const ConnectWizard: React.FC<ConnectWizardProps> = ({ onClose, onConnect, onAut
                 <Loader2 className="w-12 h-12 text-blue-500 animate-spin relative z-10" />
               </div>
               <div>
-                <h4 className="text-lg font-medium text-white">Verifying Connection...</h4>
-                <p className="text-sm text-slate-400">Testing access to Azure services</p>
+                <h4 className="text-lg font-medium text-white">
+                  Verifying Connection...
+                </h4>
+                <p className="text-sm text-slate-400">
+                  Testing access to Azure services
+                </p>
               </div>
 
               {/* Verification Status */}
               <div className="w-full max-w-xs space-y-2">
                 <div className="flex items-center justify-between p-2 bg-slate-800 rounded-lg">
-                  <span className="text-sm text-slate-300">Token Acquisition</span>
+                  <span className="text-sm text-slate-300">
+                    Token Acquisition
+                  </span>
                   {renderStatusIcon(verificationStatus.tokenAcquisition)}
                 </div>
                 <div className="flex items-center justify-between p-2 bg-slate-800 rounded-lg">
-                  <span className="text-sm text-slate-300">Microsoft Graph API</span>
+                  <span className="text-sm text-slate-300">
+                    Microsoft Graph API
+                  </span>
                   {renderStatusIcon(verificationStatus.graphApi)}
                 </div>
                 <div className="flex items-center justify-between p-2 bg-slate-800 rounded-lg">
-                  <span className="text-sm text-slate-300">Azure Management API</span>
+                  <span className="text-sm text-slate-300">
+                    Azure Management API
+                  </span>
                   {renderStatusIcon(verificationStatus.azureApi)}
                 </div>
               </div>
@@ -767,11 +917,17 @@ const ConnectWizard: React.FC<ConnectWizardProps> = ({ onClose, onConnect, onAut
             <div className="flex flex-col flex-1 space-y-4">
               <div className="flex items-center gap-3 pb-4 border-b border-slate-800">
                 <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold">
-                  {getInitials(userProfile?.displayName || selectedAccount.name || 'U')}
+                  {getInitials(
+                    userProfile?.displayName || selectedAccount.name || 'U'
+                  )}
                 </div>
                 <div className="flex-1">
-                  <div className="text-sm font-bold text-white">{userProfile?.displayName || selectedAccount.name}</div>
-                  <div className="text-xs text-slate-400">{userProfile?.email || selectedAccount.username}</div>
+                  <div className="text-sm font-bold text-white">
+                    {userProfile?.displayName || selectedAccount.name}
+                  </div>
+                  <div className="text-xs text-slate-400">
+                    {userProfile?.email || selectedAccount.username}
+                  </div>
                 </div>
                 <button
                   onClick={() => setStep('accounts')}
@@ -785,31 +941,43 @@ const ConnectWizard: React.FC<ConnectWizardProps> = ({ onClose, onConnect, onAut
               {/* Connection Verified Badge */}
               <div className="flex items-center gap-2 p-2 bg-emerald-900/20 border border-emerald-800/50 rounded-lg">
                 <CheckCircle className="w-4 h-4 text-emerald-500" />
-                <span className="text-xs text-emerald-400 font-medium">Connection verified successfully</span>
+                <span className="text-xs text-emerald-400 font-medium">
+                  Connection verified successfully
+                </span>
               </div>
 
               <div className="space-y-2 flex-1 overflow-auto">
-                <label className="text-sm font-medium text-slate-300">Select Subscription</label>
+                <label className="text-sm font-medium text-slate-300">
+                  Select Subscription
+                </label>
                 <div className="space-y-2 max-h-[200px] overflow-y-auto">
-                  {subscriptions.map(sub => (
+                  {subscriptions.map((sub) => (
                     <button
                       key={sub.subscriptionId}
                       onClick={() => setSelectedSub(sub.subscriptionId)}
-                      className={`w-full text-left p-3 rounded-lg border transition-all ${selectedSub === sub.subscriptionId
+                      className={`w-full text-left p-3 rounded-lg border transition-all ${
+                        selectedSub === sub.subscriptionId
                           ? 'bg-blue-600/10 border-blue-500 ring-1 ring-blue-500'
                           : 'bg-slate-800 border-slate-700 hover:border-slate-500'
-                        }`}
+                      }`}
                     >
                       <div className="flex items-center gap-2">
                         <Building2 className="w-4 h-4 text-slate-400" />
-                        <div className="text-sm font-medium text-white">{sub.displayName}</div>
+                        <div className="text-sm font-medium text-white">
+                          {sub.displayName}
+                        </div>
                       </div>
-                      <div className="text-xs text-slate-500 font-mono mt-1">{sub.subscriptionId}</div>
+                      <div className="text-xs text-slate-500 font-mono mt-1">
+                        {sub.subscriptionId}
+                      </div>
                       <div className="flex gap-2 mt-2">
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded ${sub.state === 'Enabled'
-                            ? 'bg-emerald-900/50 text-emerald-400'
-                            : 'bg-slate-900 text-slate-400'
-                          }`}>
+                        <span
+                          className={`text-[10px] px-1.5 py-0.5 rounded ${
+                            sub.state === 'Enabled'
+                              ? 'bg-emerald-900/50 text-emerald-400'
+                              : 'bg-slate-900 text-slate-400'
+                          }`}
+                        >
                           {sub.state}
                         </span>
                       </div>
@@ -833,7 +1001,9 @@ const ConnectWizard: React.FC<ConnectWizardProps> = ({ onClose, onConnect, onAut
             <div className="flex flex-col items-center justify-center flex-1 text-center space-y-4">
               <CheckCircle2 className="w-16 h-16 text-emerald-500 animate-in zoom-in duration-300" />
               <div>
-                <h4 className="text-xl font-bold text-white">Connected Successfully</h4>
+                <h4 className="text-xl font-bold text-white">
+                  Connected Successfully
+                </h4>
                 <p className="text-sm text-slate-400 mt-2">
                   Your Azure subscription is now connected.
                 </p>
@@ -848,7 +1018,9 @@ const ConnectWizard: React.FC<ConnectWizardProps> = ({ onClose, onConnect, onAut
                 <AlertCircle className="w-8 h-8 text-red-400" />
               </div>
               <div>
-                <h4 className="text-lg font-bold text-white">Connection Failed</h4>
+                <h4 className="text-lg font-bold text-white">
+                  Connection Failed
+                </h4>
                 <p className="text-sm text-red-400 mt-2 max-w-[300px]">
                   {error}
                 </p>
@@ -876,14 +1048,18 @@ const ConnectWizard: React.FC<ConnectWizardProps> = ({ onClose, onConnect, onAut
               </button>
             </div>
           )}
-
         </div>
 
         {/* Progress Bar */}
         <div className="h-1 bg-slate-800 w-full">
           <div
-            className={`h-full transition-all duration-500 ${step === 'error' ? 'bg-red-500' : step.startsWith('setup') ? 'bg-purple-500' : 'bg-blue-500'
-              }`}
+            className={`h-full transition-all duration-500 ${
+              step === 'error'
+                ? 'bg-red-500'
+                : step.startsWith('setup')
+                  ? 'bg-purple-500'
+                  : 'bg-blue-500'
+            }`}
             style={{ width: `${getProgress()}%` }}
           ></div>
         </div>

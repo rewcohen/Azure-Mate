@@ -36,9 +36,19 @@ declare global {
     };
     electronAPI?: {
       checkPowerShell: () => Promise<any>;
-      installAzModule: (callback: (output: string, type: string) => void) => Promise<any>;
-      connectAzure: (accessToken: string, subscriptionId: string, tenantId: string, callback: (output: string, type: string) => void) => Promise<any>;
-      executePowerShell: (script: string, callback: (output: string, type: string) => void) => Promise<any>;
+      installAzModule: (
+        callback: (output: string, type: string) => void
+      ) => Promise<any>;
+      connectAzure: (
+        accessToken: string,
+        subscriptionId: string,
+        tenantId: string,
+        callback: (output: string, type: string) => void
+      ) => Promise<any>;
+      executePowerShell: (
+        script: string,
+        callback: (output: string, type: string) => void
+      ) => Promise<any>;
       stopPowerShell: () => Promise<boolean>;
     };
   }
@@ -49,9 +59,11 @@ declare global {
  */
 export function isElectron(): boolean {
   // Check for Electron's process object
-  return typeof window !== 'undefined' &&
+  return (
+    typeof window !== 'undefined' &&
     typeof window.process === 'object' &&
-    window.process?.type === 'renderer';
+    window.process?.type === 'renderer'
+  );
 }
 
 /**
@@ -111,9 +123,11 @@ export async function installAzModule(
   onOutput('This may take several minutes...', 'info');
 
   try {
-    const result = await (window as any).electronAPI.installAzModule((output: string, type: string) => {
-      onOutput(output, type as any);
-    });
+    const result = await (window as any).electronAPI.installAzModule(
+      (output: string, type: string) => {
+        onOutput(output, type as any);
+      }
+    );
 
     if (result.success) {
       onOutput('Azure PowerShell module installed successfully!', 'success');
@@ -197,7 +211,10 @@ export async function executePowerShellScript(
     if (result.success) {
       onOutput('Script execution completed successfully!', 'success');
     } else {
-      onOutput(`Script execution failed with exit code ${result.exitCode}`, 'error');
+      onOutput(
+        `Script execution failed with exit code ${result.exitCode}`,
+        'error'
+      );
     }
 
     return result;
@@ -231,7 +248,10 @@ export async function stopExecution(): Promise<boolean> {
 /**
  * Get execution method recommendation
  */
-export function getRecommendedExecutionMethod(): 'electron' | 'cloudshell' | 'manual' {
+export function getRecommendedExecutionMethod():
+  | 'electron'
+  | 'cloudshell'
+  | 'manual' {
   if (isElectron() && hasElectronIPC()) {
     return 'electron';
   }

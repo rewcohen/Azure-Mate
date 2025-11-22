@@ -1,7 +1,17 @@
-
 import React, { useEffect, useRef, useState } from 'react';
 import { DeploymentLog } from '../types';
-import { Loader2, CheckCircle2, XCircle, AlertTriangle, Terminal, ChevronRight, Monitor, Cloud, Copy, Check } from 'lucide-react';
+import {
+  Loader2,
+  CheckCircle2,
+  XCircle,
+  AlertTriangle,
+  Terminal,
+  ChevronRight,
+  Monitor,
+  Cloud,
+  Copy,
+  Check,
+} from 'lucide-react';
 
 interface TerminalOutputProps {
   logs: DeploymentLog[];
@@ -14,7 +24,7 @@ const TerminalOutput: React.FC<TerminalOutputProps> = ({
   logs,
   className = '',
   isComplete,
-  executionMethod = 'cloudshell'
+  executionMethod = 'cloudshell',
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [copied, setCopied] = useState(false);
@@ -34,7 +44,7 @@ const TerminalOutput: React.FC<TerminalOutputProps> = ({
         hour: '2-digit',
         minute: '2-digit',
         second: '2-digit',
-        hour12: false
+        hour12: false,
       });
     } catch {
       return timestamp;
@@ -43,7 +53,9 @@ const TerminalOutput: React.FC<TerminalOutputProps> = ({
 
   // Copy all output to clipboard
   const handleCopyOutput = async () => {
-    const output = logs.map(log => `[${formatTimestamp(log.timestamp)}] ${log.message}`).join('\n');
+    const output = logs
+      .map((log) => `[${formatTimestamp(log.timestamp)}] ${log.message}`)
+      .join('\n');
     try {
       await navigator.clipboard.writeText(output);
       setCopied(true);
@@ -56,7 +68,9 @@ const TerminalOutput: React.FC<TerminalOutputProps> = ({
   const isLocal = executionMethod === 'local';
 
   return (
-    <div className={`flex flex-col bg-[#0d1117] border border-slate-800 rounded-lg overflow-hidden font-mono text-xs shadow-2xl ${className}`}>
+    <div
+      className={`flex flex-col bg-[#0d1117] border border-slate-800 rounded-lg overflow-hidden font-mono text-xs shadow-2xl ${className}`}
+    >
       {/* Terminal Header */}
       <div className="flex items-center justify-between px-4 py-2 bg-slate-900 border-b border-slate-800">
         <div className="flex items-center gap-2">
@@ -81,32 +95,50 @@ const TerminalOutput: React.FC<TerminalOutputProps> = ({
             className="flex items-center gap-1 px-2 py-1 text-[10px] text-slate-400 hover:text-white hover:bg-slate-800 rounded transition-colors"
             title="Copy output"
           >
-            {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+            {copied ? (
+              <Check className="w-3 h-3" />
+            ) : (
+              <Copy className="w-3 h-3" />
+            )}
             {copied ? 'Copied' : 'Copy'}
           </button>
           <div className="flex gap-1.5">
-            <div className={`w-3 h-3 rounded-full ${isComplete ? 'bg-slate-700' : 'bg-emerald-500 animate-pulse'}`}></div>
+            <div
+              className={`w-3 h-3 rounded-full ${isComplete ? 'bg-slate-700' : 'bg-emerald-500 animate-pulse'}`}
+            ></div>
             <div className="w-3 h-3 rounded-full bg-slate-700"></div>
           </div>
         </div>
       </div>
 
       {/* Terminal Body */}
-      <div ref={scrollRef} className="flex-1 p-4 overflow-y-auto space-y-1.5 min-h-[300px] max-h-[500px]">
+      <div
+        ref={scrollRef}
+        className="flex-1 p-4 overflow-y-auto space-y-1.5 min-h-[300px] max-h-[500px]"
+      >
         {/* Welcome message based on execution method */}
         <div className="text-slate-500 mb-4 pb-3 border-b border-slate-800/50">
           {isLocal ? (
             <>
-              Windows PowerShell<br/>
-              Copyright (C) Microsoft Corporation. All rights reserved.<br/>
-              <span className="text-emerald-400">Azure PowerShell (Az Module)</span><br/>
+              Windows PowerShell
+              <br />
+              Copyright (C) Microsoft Corporation. All rights reserved.
+              <br />
+              <span className="text-emerald-400">
+                Azure PowerShell (Az Module)
+              </span>
+              <br />
               Connecting to Azure...
             </>
           ) : (
             <>
-              Microsoft Azure PowerShell<br/>
-              Cloud Shell instance: <span className="text-yellow-600">East US</span><br/>
-              Requesting Cloud Shell... Succeeded.<br/>
+              Microsoft Azure PowerShell
+              <br />
+              Cloud Shell instance:{' '}
+              <span className="text-yellow-600">East US</span>
+              <br />
+              Requesting Cloud Shell... Succeeded.
+              <br />
               Connecting terminal...
             </>
           )}
@@ -114,7 +146,10 @@ const TerminalOutput: React.FC<TerminalOutputProps> = ({
 
         {/* Log entries */}
         {logs.map((log) => (
-          <div key={log.id} className="flex gap-2 animate-in fade-in slide-in-from-left-1 duration-100">
+          <div
+            key={log.id}
+            className="flex gap-2 animate-in fade-in slide-in-from-left-1 duration-100"
+          >
             <span className="text-slate-600 select-none min-w-[70px] text-[10px]">
               {formatTimestamp(log.timestamp)}
             </span>
@@ -164,17 +199,20 @@ const TerminalOutput: React.FC<TerminalOutputProps> = ({
         {/* Completion indicator */}
         {isComplete && (
           <div className="text-slate-500 mt-4 pt-2 border-t border-slate-800/50">
-            PS {isLocal ? 'C:\\>' : 'Azure:\\>'} <span className="animate-pulse">_</span>
+            PS {isLocal ? 'C:\\>' : 'Azure:\\>'}{' '}
+            <span className="animate-pulse">_</span>
           </div>
         )}
       </div>
 
       {/* Status bar */}
       <div className="flex items-center justify-between px-4 py-1.5 bg-slate-900/50 border-t border-slate-800 text-[10px] text-slate-500">
-        <span>{logs.length} {logs.length === 1 ? 'entry' : 'entries'}</span>
+        <span>
+          {logs.length} {logs.length === 1 ? 'entry' : 'entries'}
+        </span>
         <span>
           {isComplete ? (
-            logs.some(l => l.type === 'error') ? (
+            logs.some((l) => l.type === 'error') ? (
               <span className="text-red-400">Completed with errors</span>
             ) : (
               <span className="text-emerald-400">Completed successfully</span>

@@ -15,11 +15,11 @@ const Mermaid: React.FC<MermaidProps> = ({ chart }) => {
 
   useEffect(() => {
     if (window.mermaid) {
-      window.mermaid.initialize({ 
+      window.mermaid.initialize({
         startOnLoad: true,
         theme: 'dark',
         securityLevel: 'loose',
-        fontFamily: 'Inter'
+        fontFamily: 'Inter',
       });
     }
   }, []);
@@ -28,14 +28,14 @@ const Mermaid: React.FC<MermaidProps> = ({ chart }) => {
     if (ref.current && window.mermaid) {
       // Reset content
       ref.current.removeAttribute('data-processed');
-      
+
       try {
         window.mermaid.run({
-          nodes: [ref.current]
+          nodes: [ref.current],
         });
       } catch (e) {
-        console.error("Mermaid error:", e);
-        ref.current.innerHTML = "Error rendering diagram.";
+        console.error('Mermaid error:', e);
+        ref.current.innerHTML = 'Error rendering diagram.';
       }
     }
   }, [chart]);

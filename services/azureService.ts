@@ -1,6 +1,14 @@
-import { IPublicClientApplication, AccountInfo, InteractionRequiredAuthError } from '@azure/msal-browser';
+import {
+  IPublicClientApplication,
+  AccountInfo,
+  InteractionRequiredAuthError,
+} from '@azure/msal-browser';
 import { ResourceNode } from '../types';
-import { azureTokenRequest, apiEndpoints, apiVersions } from '../config/authConfig';
+import {
+  azureTokenRequest,
+  apiEndpoints,
+  apiVersions,
+} from '../config/authConfig';
 
 /**
  * Azure Subscription interface
@@ -109,7 +117,9 @@ export async function getUserProfile(
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to fetch user profile: ${response.status} ${response.statusText}`);
+    throw new Error(
+      `Failed to fetch user profile: ${response.status} ${response.statusText}`
+    );
   }
 
   return response.json();
@@ -135,7 +145,9 @@ export async function listSubscriptions(
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`Failed to list subscriptions: ${response.status} ${response.statusText}\n${errorText}`);
+    throw new Error(
+      `Failed to list subscriptions: ${response.status} ${response.statusText}\n${errorText}`
+    );
   }
 
   const data = await response.json();
@@ -166,7 +178,9 @@ export async function listTenants(
   );
 
   if (!response.ok) {
-    throw new Error(`Failed to list tenants: ${response.status} ${response.statusText}`);
+    throw new Error(
+      `Failed to list tenants: ${response.status} ${response.statusText}`
+    );
   }
 
   const data = await response.json();
@@ -197,7 +211,9 @@ export async function listResourceGroups(
   );
 
   if (!response.ok) {
-    throw new Error(`Failed to list resource groups: ${response.status} ${response.statusText}`);
+    throw new Error(
+      `Failed to list resource groups: ${response.status} ${response.statusText}`
+    );
   }
 
   const data = await response.json();
@@ -229,7 +245,9 @@ export async function listResources(
   );
 
   if (!response.ok) {
-    throw new Error(`Failed to list resources: ${response.status} ${response.statusText}`);
+    throw new Error(
+      `Failed to list resources: ${response.status} ${response.statusText}`
+    );
   }
 
   const data = await response.json();
@@ -264,7 +282,9 @@ export async function getResource(
   );
 
   if (!response.ok) {
-    throw new Error(`Failed to get resource: ${response.status} ${response.statusText}`);
+    throw new Error(
+      `Failed to get resource: ${response.status} ${response.statusText}`
+    );
   }
 
   return response.json();
@@ -298,7 +318,9 @@ export async function searchResources(
   );
 
   if (!response.ok) {
-    throw new Error(`Failed to search resources: ${response.status} ${response.statusText}`);
+    throw new Error(
+      `Failed to search resources: ${response.status} ${response.statusText}`
+    );
   }
 
   const data = await response.json();
@@ -348,7 +370,11 @@ export async function getDefaultLocation(
   subscriptionId: string
 ): Promise<string | null> {
   try {
-    const resourceGroups = await listResourceGroups(msalInstance, account, subscriptionId);
+    const resourceGroups = await listResourceGroups(
+      msalInstance,
+      account,
+      subscriptionId
+    );
     if (resourceGroups.length > 0) {
       return resourceGroups[0].location;
     }

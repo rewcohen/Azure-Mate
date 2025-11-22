@@ -51,7 +51,9 @@ export const requiredPermissions = {
 /**
  * Generate PowerShell script to create Azure AD App Registration
  */
-export function generateAppRegistrationScript(config: AppRegistrationConfig = defaultAppConfig): string {
+export function generateAppRegistrationScript(
+  config: AppRegistrationConfig = defaultAppConfig
+): string {
   return `# Azure AD App Registration Script for AzureMate
 # This script creates an App Registration with the required permissions
 # Run this in Azure Cloud Shell (PowerShell) or local PowerShell with Az module
@@ -126,7 +128,9 @@ if ($app) {
 /**
  * Generate Azure CLI script (alternative to PowerShell)
  */
-export function generateAzureCliScript(config: AppRegistrationConfig = defaultAppConfig): string {
+export function generateAzureCliScript(
+  config: AppRegistrationConfig = defaultAppConfig
+): string {
   return `#!/bin/bash
 # Azure AD App Registration Script for AzureMate (Azure CLI)
 # Run this in Azure Cloud Shell (Bash) or local terminal with Azure CLI
@@ -199,7 +203,8 @@ export const manualSetupInstructions = [
   {
     step: 1,
     title: 'Go to Azure Portal',
-    description: 'Navigate to portal.azure.com and sign in with your Microsoft account.',
+    description:
+      'Navigate to portal.azure.com and sign in with your Microsoft account.',
     link: 'https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps/ApplicationsListBlade',
   },
   {
@@ -224,7 +229,8 @@ export const manualSetupInstructions = [
   {
     step: 4,
     title: 'Copy Client ID',
-    description: 'From the "Overview" page, copy the "Application (client) ID" and paste it below.',
+    description:
+      'From the "Overview" page, copy the "Application (client) ID" and paste it below.',
   },
 ];
 
@@ -233,7 +239,8 @@ export const manualSetupInstructions = [
  */
 export function isValidClientIdFormat(clientId: string): boolean {
   // Azure AD Client IDs are GUIDs
-  const guidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const guidRegex =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   return guidRegex.test(clientId.trim());
 }
 

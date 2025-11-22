@@ -17,21 +17,25 @@
 ### Option 2: Command Line Deployment
 
 **Deploy with Docker:**
+
 ```powershell
 .\deploy.bat docker
 ```
 
 **Build Electron Desktop App:**
+
 ```powershell
 .\deploy.bat electron
 ```
 
 **Deploy Both Docker and Electron:**
+
 ```powershell
 .\deploy.bat both
 ```
 
 **Development Mode (Hot Reload):**
+
 ```powershell
 .\deploy.bat dev
 ```
@@ -102,6 +106,7 @@ Before signing in with Microsoft 365, you need to:
 4. **Rebuild** the application
 
 Or use the deployment script with your Client ID:
+
 ```powershell
 .\deploy.bat docker -clientid "your-client-id-here"
 ```
@@ -111,11 +116,13 @@ Or use the deployment script with your Client ID:
 ### Docker Issues
 
 **Container won't start:**
+
 ```bash
 docker-compose logs
 ```
 
 **Port 3000 in use:**
+
 ```bash
 # Find process using port 3000
 netstat -ano | findstr :3000
@@ -127,25 +134,30 @@ taskkill /PID <process_id> /F
 ### Authentication Issues
 
 **"AADSTS50011: Redirect URI mismatch"**
+
 - Ensure `http://localhost:3000` is registered in Azure Portal > App Registration > Authentication
 
 **"Admin consent required"**
+
 - Have a Global Administrator sign in first
 - Or use the Admin Consent URL in the error message
 
 **"No Azure subscriptions found"**
+
 - Ensure your account has access to Azure subscriptions
 - Check Azure Portal to verify subscription access
 
 ### Electron Issues
 
 **App won't start:**
+
 ```bash
 # Check for errors
 npm run electron 2>&1
 ```
 
 **Build fails:**
+
 ```bash
 # Clean and rebuild
 rm -rf node_modules dist electron-dist
@@ -155,16 +167,16 @@ npm run electron:build:win
 
 ## Useful Commands
 
-| Command | Description |
-|---------|-------------|
-| `npm run dev` | Start Vite dev server |
-| `npm run build` | Build for production |
-| `npm run electron` | Launch Electron app |
-| `npm run electron:dev` | Development mode with hot reload |
-| `npm run electron:build:win` | Build Windows installer |
-| `docker-compose up -d` | Start Docker container |
-| `docker-compose down` | Stop Docker container |
-| `docker-compose logs -f` | View container logs |
+| Command                      | Description                      |
+| ---------------------------- | -------------------------------- |
+| `npm run dev`                | Start Vite dev server            |
+| `npm run build`              | Build for production             |
+| `npm run electron`           | Launch Electron app              |
+| `npm run electron:dev`       | Development mode with hot reload |
+| `npm run electron:build:win` | Build Windows installer          |
+| `docker-compose up -d`       | Start Docker container           |
+| `docker-compose down`        | Stop Docker container            |
+| `docker-compose logs -f`     | View container logs              |
 
 ## File Structure
 
