@@ -15,6 +15,13 @@ import {
  * - Azure Resource Manager API access
  */
 
+// Placeholder values that indicate setup is not complete
+const PLACEHOLDER_VALUES = [
+  'your-application-client-id-here',
+  'YOUR_APPLICATION_CLIENT_ID_HERE',
+  '',
+];
+
 // Get environment variables (Vite uses import.meta.env)
 // Check for localStorage override first (set by the setup wizard)
 const getClientId = (): string => {
@@ -24,12 +31,22 @@ const getClientId = (): string => {
       ? localStorage.getItem('azure_client_id_override')
       : null;
 
-  if (localStorageClientId && localStorageClientId.trim()) {
+  if (localStorageClientId && localStorageClientId.trim() && !isPlaceholder(localStorageClientId)) {
     return localStorageClientId.trim();
   }
 
   // Fall back to environment variable
-  return import.meta.env.VITE_AZURE_CLIENT_ID || '';
+  const envClientId = import.meta.env.VITE_AZURE_CLIENT_ID || '';
+  if (envClientId && !isPlaceholder(envClientId)) {
+    return envClientId;
+  }
+
+  return '';
+};
+
+// Check if a value is a placeholder
+const isPlaceholder = (value: string): boolean => {
+  return PLACEHOLDER_VALUES.includes(value.toLowerCase().trim());
 };
 
 const clientId = getClientId();
@@ -186,9 +203,12 @@ export function buildAdminConsentUrl(): string {
 
 /**
  * Check if the MSAL configuration is valid
+ * Returns true only if a real (non-placeholder) client ID is configured
  */
 export function isConfigured(): boolean {
-  return !!clientId && clientId.length > 0;
+  // Re-check the client ID at call time to handle dynamic updates
+  const currentClientId = getClientId();
+  return !!currentClientId && currentClientId.length > 0 && !isPlaceholder(currentClientId);
 }
 
 /**

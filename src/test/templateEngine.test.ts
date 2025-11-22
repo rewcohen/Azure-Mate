@@ -29,9 +29,9 @@ describe('templateEngine', () => {
 
     it('should substitute wizard inputs', () => {
       const template = 'Creating VM {{vmName}} of size {{vmSize}}';
-      const inputs = [
+      const inputs: WizardInput[] = [
         { id: 'vmName', label: 'VM Name', type: 'text' },
-        { id: 'vmSize', label: 'VM Size', type: 'select', options: ['Standard_B1s', 'Standard_B2s'] },
+        { id: 'vmSize', label: 'VM Size', type: 'select' as const, options: ['Standard_B1s', 'Standard_B2s'] },
       ];
       const wizardInputs = {
         vmName: 'web-01',
@@ -55,7 +55,7 @@ describe('templateEngine', () => {
 
     it('should substitute Azure context when connected', () => {
       const template = 'Subscription: {{subscriptionId}}, Tenant: {{tenantId}}';
-      const inputs = [];
+      const inputs: WizardInput[] = [];
       const wizardInputs = {};
       const azureContext = { subscriptionId: 'abc-123', tenantId: 'xyz-789', isConnected: true };
       const globalVars = {
@@ -75,7 +75,7 @@ describe('templateEngine', () => {
 
     it('should leave unsubstituted variables as is', () => {
       const template = 'Hello {{unknownVariable}}';
-      const inputs = [];
+      const inputs: WizardInput[] = [];
       const wizardInputs = {};
       const azureContext = { subscriptionId: '123', tenantId: '456', isConnected: false };
       const globalVars = {
@@ -113,8 +113,8 @@ describe('templateEngine', () => {
         ollamaModel: 'llama3',
       };
 
-      const inputs = [
-        { id: 'vmName', label: 'VM Name', type: 'text' },
+      const inputs: WizardInput[] = [
+        { id: 'vmName', label: 'VM Name', type: 'text' as const },
       ];
       const values = {
         vmName: 'web-01',

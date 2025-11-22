@@ -31,7 +31,17 @@
       "mcp__MCP_DOCKER__browser_take_screenshot",
       "WebSearch",
       "WebFetch(domain:rakhesh.com)",
-      "WebFetch(domain:gist.github.com)"
+      "WebFetch(domain:gist.github.com)",
+      "Bash(timeout /t 10 /nobreak)",
+      "Bash(tasklist:*)",
+      "Bash(cmd /c \"taskkill /F /IM electron.exe\")",
+      "Bash(powershell -Command:*)",
+      "Bash(git config:*)",
+      "Bash(where sh)",
+      "Bash(set HUSKY=0)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push)"
     ],
     "deny": [],
     "ask": []

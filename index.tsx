@@ -8,6 +8,7 @@ import {
 } from '@azure/msal-browser';
 import { MsalProvider } from '@azure/msal-react';
 import App from './App';
+import SetupWizard from './components/SetupWizard';
 import { msalConfig, isConfigured } from './config/authConfig';
 
 // Create MSAL instance
@@ -51,7 +52,7 @@ msalInstance
 
     const root = ReactDOM.createRoot(rootElement);
 
-    // Only wrap with MsalProvider if configured
+    // Show SetupWizard if not configured, otherwise render the main app
     if (isConfigured()) {
       root.render(
         <React.StrictMode>
@@ -61,12 +62,10 @@ msalInstance
         </React.StrictMode>
       );
     } else {
-      // Render without MsalProvider if not configured (will show setup message)
+      // Show setup wizard for first-time configuration
       root.render(
         <React.StrictMode>
-          <MsalProvider instance={msalInstance}>
-            <App />
-          </MsalProvider>
+          <SetupWizard onComplete={() => window.location.reload()} />
         </React.StrictMode>
       );
     }

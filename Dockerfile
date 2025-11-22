@@ -19,8 +19,8 @@ ENV VITE_AZURE_REDIRECT_URI=$VITE_AZURE_REDIRECT_URI
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci
+# Install dependencies (using npm install to generate package-lock.json if missing)
+RUN npm install
 
 # Copy source code
 COPY . .
