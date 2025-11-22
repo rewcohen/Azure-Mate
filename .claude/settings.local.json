@@ -41,7 +41,9 @@
       "Bash(set HUSKY=0)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(git push)"
+      "Bash(git push)",
+      "Bash(npx husky init)",
+      "Bash(git update-index:*)"
     ],
     "deny": [],
     "ask": []
