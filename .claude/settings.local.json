@@ -19,7 +19,19 @@
       "Bash(npm run build:*)",
       "Bash(docker-compose build:*)",
       "Bash(npm install:*)",
-      "Bash(move \"C:\\Users\\hdcor\\Azure-Mate\\electron\\main.js\" \"C:\\Users\\hdcor\\Azure-Mate\\electron\\main.cjs\")"
+      "Bash(move \"C:\\Users\\hdcor\\Azure-Mate\\electron\\main.js\" \"C:\\Users\\hdcor\\Azure-Mate\\electron\\main.cjs\")",
+      "Bash(npx tsc:*)",
+      "Bash(docker-compose down:*)",
+      "mcp__MCP_DOCKER__get_api_info",
+      "mcp__MCP_DOCKER__resolve-library-id",
+      "mcp__MCP_DOCKER__get-library-docs",
+      "Bash(npm run dev:*)",
+      "mcp__MCP_DOCKER__browser_navigate",
+      "mcp__MCP_DOCKER__browser_snapshot",
+      "mcp__MCP_DOCKER__browser_take_screenshot",
+      "WebSearch",
+      "WebFetch(domain:rakhesh.com)",
+      "WebFetch(domain:gist.github.com)"
     ],
     "deny": [],
     "ask": []

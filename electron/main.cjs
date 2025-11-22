@@ -1,12 +1,16 @@
 const { app, BrowserWindow, shell, Menu, dialog } = require('electron');
 const path = require('path');
 const url = require('url');
+const { registerHandlers: registerPowerShellHandlers } = require('./powershellHandler.cjs');
 
 // Keep a global reference of the window object to prevent garbage collection
 let mainWindow = null;
 
 // Check if we're in development mode
 const isDev = process.env.NODE_ENV === 'development' || process.argv.includes('--dev');
+
+// Register IPC handlers for PowerShell
+registerPowerShellHandlers();
 
 function createWindow() {
   // Create the browser window
@@ -21,8 +25,8 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       webSecurity: true,
-      // Enable web authentication for MSAL
-      enableRemoteModule: false,
+      // Preload script for IPC communication
+      preload: path.join(__dirname, 'preload.cjs'),
     },
     // Modern window styling
     backgroundColor: '#0f172a',

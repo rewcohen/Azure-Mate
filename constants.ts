@@ -37,7 +37,9 @@ export const SCENARIOS: Scenario[] = [
       { id: 'rgSuffix', label: 'RG Suffix', type: 'text', defaultValue: 'compute' },
       { id: 'vmName', label: 'VM Name', type: 'text', defaultValue: 'vm-app-01' },
       { id: 'vmSize', label: 'VM Size', type: 'select', options: ['Standard_B1s', 'Standard_B2s', 'Standard_D2s_v3', 'Standard_D4s_v3', 'Standard_F2s_v2'], defaultValue: 'Standard_B2s', description: 'Affects cost.' },
-      { id: 'adminUser', label: 'Admin Username', type: 'text', defaultValue: 'azureuser' }
+      { id: 'adminUser', label: 'Admin Username', type: 'text', defaultValue: 'azureuser' },
+      { id: 'authType', label: 'Authentication', type: 'select', options: ['SSH Key (Generate)', 'SSH Key (Provide)', 'Password'], defaultValue: 'SSH Key (Generate)', description: 'SSH key is more secure than password.' },
+      { id: 'sshKeyPath', label: 'SSH Public Key Path', type: 'text', defaultValue: '~/.ssh/id_rsa.pub', description: 'Path to your SSH public key file (only for "Provide" option)' }
     ],
     learnLinks: [
       { title: 'Quickstart: Create a Linux VM', url: 'https://learn.microsoft.com/en-us/azure/virtual-machines/linux/quick-create-powershell' },
@@ -91,6 +93,11 @@ try {
     Write-Host "Creating Networking..."
     $vnet = New-AzVirtualNetwork -ResourceGroupName $RgName -Location $Location -Name "$VmName-vnet" -AddressPrefix "10.0.0.0/16"
     $nsg = New-AzNetworkSecurityGroup -ResourceGroupName $RgName -Location $Location -Name "$VmName-nsg"
+
+    # Add SSH rule - WARNING: Opens SSH to all IPs. Consider restricting in production.
+    $nsg | Add-AzNetworkSecurityRuleConfig -Name "AllowSSH" -Description "Allow SSH" -Access Allow -Protocol Tcp -Direction Inbound -Priority 100 -SourceAddressPrefix "*" -SourcePortRange * -DestinationAddressPrefix * -DestinationPortRange 22 | Set-AzNetworkSecurityGroup
+    Write-Warning "SSH (port 22) is open to all IPs. Consider restricting to specific IP ranges for production."
+
     $subnet = Add-AzVirtualNetworkSubnetConfig -Name "default" -AddressPrefix "10.0.1.0/24" -NetworkSecurityGroup $nsg -VirtualNetwork $vnet
     $vnet | Set-AzVirtualNetwork
 
@@ -103,18 +110,29 @@ try {
 
 try {
     Write-Host "Creating VM Config..."
-    $vmConfig = New-AzVMConfig -VMName $VmName -VMSize $VmSize |
-        Set-AzVMOperatingSystem -Linux -ComputerName $VmName -Credential (Get-Credential) |
-        Set-AzVMSourceImage -PublisherName "Canonical" -Offer "0001-com-ubuntu-server-jammy" -Skus "22_04-lts" -Version "latest" |
-        Add-AzVMNetworkInterface -Id $nic.Id |
-        Assign-AzUserAssignedIdentity -Identity "/subscriptions/{{subscriptionId}}/resourcegroups/$RgName/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-$VmName"
+    $Credential = Get-Credential -Message "Enter admin password for $AdminUser"
 
+    # Build base VM config with PPG if specified
     if ($ppgId) {
-        $vmConfig = Set-AzVMProximityPlacementGroup -VMConfig $vmConfig -Id $ppgId
+        $vmConfig = New-AzVMConfig -VMName $VmName -VMSize $VmSize -ProximityPlacementGroupId $ppgId
+    } else {
+        $vmConfig = New-AzVMConfig -VMName $VmName -VMSize $VmSize
     }
 
-    New-AzVM -ResourceGroupName $RgName -Location $Location -VM $vmConfig -Tag $Tags
-    Write-Host "Done." -ForegroundColor Green
+    $vmConfig = $vmConfig |
+        Set-AzVMOperatingSystem -Linux -ComputerName $VmName -Credential $Credential -DisablePasswordAuthentication:$false |
+        Set-AzVMSourceImage -PublisherName "Canonical" -Offer "0001-com-ubuntu-server-jammy" -Skus "22_04-lts" -Version "latest" |
+        Add-AzVMNetworkInterface -Id $nic.Id
+
+    Write-Host "Creating VM $VmName..."
+    $vm = New-AzVM -ResourceGroupName $RgName -Location $Location -VM $vmConfig -Tag $Tags
+
+    # Enable System Assigned Managed Identity
+    Write-Host "Enabling System Assigned Managed Identity..."
+    Update-AzVM -ResourceGroupName $RgName -VM $vm -IdentityType SystemAssigned
+
+    Write-Host "Done. VM created successfully!" -ForegroundColor Green
+    Write-Host "Public IP: $((Get-AzPublicIpAddress -Name "$VmName-pip" -ResourceGroupName $RgName).IpAddress)"
 } catch {
     Write-Error "Failed to create VM: $_"
     exit
@@ -199,17 +217,23 @@ try {
 
 try {
     Write-Host "Creating VM Config..."
-    $cred = Get-Credential -Message "Enter VM Admin Password"
+    $cred = Get-Credential -Message "Enter VM Admin Password for $AdminUser"
 
     $vmConfig = New-AzVMConfig -VMName $VmName -VMSize $VmSize |
         Set-AzVMOperatingSystem -Windows -ComputerName $VmName -Credential $cred |
         Set-AzVMSourceImage -PublisherName "MicrosoftWindowsServer" -Offer "WindowsServer" -Skus "2022-Datacenter" -Version "latest" |
-        Add-AzVMNetworkInterface -Id $nic.Id |
-        Assign-AzSystemAssignedIdentity
+        Add-AzVMNetworkInterface -Id $nic.Id
 
-    New-AzVM -ResourceGroupName $RgName -Location $Location -VM $vmConfig -Tag $Tags
+    Write-Host "Creating VM $VmName..."
+    $vm = New-AzVM -ResourceGroupName $RgName -Location $Location -VM $vmConfig -Tag $Tags
 
-    Write-Host "Windows VM Deployed. Connect via RDP to $($pip.IpAddress)"
+    # Enable System Assigned Managed Identity
+    Write-Host "Enabling System Assigned Managed Identity..."
+    Update-AzVM -ResourceGroupName $RgName -VM $vm -IdentityType SystemAssigned
+
+    $publicIp = (Get-AzPublicIpAddress -Name "$VmName-pip" -ResourceGroupName $RgName).IpAddress
+    Write-Host "Windows VM Deployed Successfully!" -ForegroundColor Green
+    Write-Host "Connect via RDP to: $publicIp"
 } catch {
     Write-Error "VM Deployment failed: $_"
     exit
@@ -239,6 +263,7 @@ try {
       { id: 'rgSuffix', label: 'RG Suffix', type: 'text', defaultValue: 'scale' },
       { id: 'vmssName', label: 'VMSS Name', type: 'text', defaultValue: 'vmss-app-01' },
       { id: 'vmSize', label: 'Instance Size', type: 'select', options: ['Standard_B1s', 'Standard_D2s_v3'], defaultValue: 'Standard_B1s' },
+      { id: 'adminUser', label: 'Admin Username', type: 'text', defaultValue: 'azureuser' },
       { id: 'minCount', label: 'Min Instances', type: 'number', defaultValue: 1 },
       { id: 'maxCount', label: 'Max Instances', type: 'number', defaultValue: 5 }
     ],
@@ -259,9 +284,14 @@ ${BASE_RG}
 ${BASE_LOC}
 $VmssName = "{{vmssName}}"
 $VmSize = "{{vmSize}}"
+$AdminUser = "{{adminUser}}"
 $MinCount = {{minCount}}
 $MaxCount = {{maxCount}}
 $Tags = ${COMMON_TAGS}
+
+# Prompt for secure password
+$Credential = Get-Credential -UserName $AdminUser -Message "Enter password for VMSS instances"
+$AdminPassword = $Credential.GetNetworkCredential().Password
 
 try {
     New-AzResourceGroup -Name $RgName -Location $Location -Tag $Tags -Force
@@ -292,7 +322,7 @@ try {
     $ipConfig = New-AzVmssIpConfig -Name "ipconfig" -LoadBalancerBackendAddressPoolsId $lb.BackendAddressPools[0].Id -SubnetId $sub.Id
     $config = New-AzVmssConfig -Location $Location -SkuCapacity $MinCount -SkuName $VmSize -UpgradePolicyMode Automatic |
         Add-AzVmssNetworkInterfaceConfiguration -Name "nic" -Primary $true -IpConfiguration $ipConfig |
-        Set-AzVmssOsProfile -ComputerNamePrefix "vmss" -AdminUsername "azureuser" -AdminPassword "SecurePassword123!" -LinuxConfiguration (New-AzVmssLinuxConfiguration -DisablePasswordAuthentication $false) |
+        Set-AzVmssOsProfile -ComputerNamePrefix "vmss" -AdminUsername $AdminUser -AdminPassword $AdminPassword -LinuxConfiguration (New-AzVmssLinuxConfiguration -DisablePasswordAuthentication $false) |
         Set-AzVmssStorageProfile -ImageReferencePublisher "Canonical" -ImageReferenceOffer "0001-com-ubuntu-server-jammy" -ImageReferenceSku "22_04-lts" -ImageReferenceVersion "latest"
 
     New-AzVmss -ResourceGroupName $RgName -Name $VmssName -VirtualMachineScaleSet $config -Tag $Tags
@@ -523,6 +553,7 @@ try {
     class User existing;
     class LB,Node1,Node2 new;`,
     scriptTemplate: `# AKS Deployment
+$ErrorActionPreference = "Stop"
 ${BASE_RG}
 ${BASE_LOC}
 $ClusterName = "{{clusterName}}"
@@ -531,26 +562,37 @@ $NodeSize = "{{vmSize}}"
 $Tags = ${COMMON_TAGS}
 $ProximityGroup = "{{proximityPlacementGroup}}"
 
-New-AzResourceGroup -Name $RgName -Location $Location -Tag $Tags -Force
+try {
+    Write-Host "Creating Resource Group $RgName..." -ForegroundColor Cyan
+    New-AzResourceGroup -Name $RgName -Location $Location -Tag $Tags -Force
+} catch {
+    Write-Error "Failed to create Resource Group: $_"
+    exit
+}
 
 # PPG Handling
 $ppgId = $null
 if (-not [string]::IsNullOrWhiteSpace($ProximityGroup)) {
-     $ppg = Get-AzProximityPlacementGroup -Name $ProximityGroup -ResourceGroupName $RgName -ErrorAction SilentlyContinue
-     if ($ppg) { $ppgId = $ppg.Id }
+    $ppg = Get-AzProximityPlacementGroup -Name $ProximityGroup -ResourceGroupName $RgName -ErrorAction SilentlyContinue
+    if ($ppg) { $ppgId = $ppg.Id }
 }
 
-Write-Host "Creating AKS Cluster..."
-New-AzAksCluster -ResourceGroupName $RgName -Name $ClusterName -Location $Location ` + 
-`-NodeCount $NodeCount -NodeVmSize $NodeSize -NetworkPlugin azure ` +
-`-EnableManagedIdentity -GenerateSshKey -Tag $Tags
+try {
+    Write-Host "Creating AKS Cluster (this may take 5-10 minutes)..." -ForegroundColor Cyan
+    New-AzAksCluster -ResourceGroupName $RgName -Name $ClusterName -Location $Location -NodeCount $NodeCount -NodeVmSize $NodeSize -NetworkPlugin azure -EnableManagedIdentity -GenerateSshKey -Tag $Tags
 
-if ($ppgId) {
-    Write-Host "Use Add-AzAksNodePool to add pools associated with PPG ID: $ppgId"
-}
+    if ($ppgId) {
+        Write-Host "To add node pools with PPG, use:" -ForegroundColor Yellow
+        Write-Host "Add-AzAksNodePool -ResourceGroupName $RgName -ClusterName $ClusterName -Name 'ppgpool' -ProximityPlacementGroupId '$ppgId'"
+    }
 
-Write-Host "Get Credentials:"
-Write-Host "Get-AzAksClusterUserCredential -ResourceGroupName $RgName -Name $ClusterName"`
+    Write-Host "AKS Cluster created successfully!" -ForegroundColor Green
+    Write-Host "Get credentials with:" -ForegroundColor Yellow
+    Write-Host "Get-AzAksClusterCredential -ResourceGroupName $RgName -Name $ClusterName"
+} catch {
+    Write-Error "Failed to create AKS cluster: $_"
+    exit
+}`
   },
 
   // --- CONTAINERS (ACI Single) ---

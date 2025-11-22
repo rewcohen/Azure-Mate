@@ -11,7 +11,22 @@ import { Configuration, LogLevel, PopupRequest, RedirectRequest } from '@azure/m
  */
 
 // Get environment variables (Vite uses import.meta.env)
-const clientId = import.meta.env.VITE_AZURE_CLIENT_ID || '';
+// Check for localStorage override first (set by the setup wizard)
+const getClientId = (): string => {
+  // Check localStorage for user-provided client ID (from setup wizard)
+  const localStorageClientId = typeof window !== 'undefined'
+    ? localStorage.getItem('azure_client_id_override')
+    : null;
+
+  if (localStorageClientId && localStorageClientId.trim()) {
+    return localStorageClientId.trim();
+  }
+
+  // Fall back to environment variable
+  return import.meta.env.VITE_AZURE_CLIENT_ID || '';
+};
+
+const clientId = getClientId();
 const tenantId = import.meta.env.VITE_AZURE_TENANT_ID || 'organizations'; // 'organizations' for multi-tenant
 const redirectUri = import.meta.env.VITE_AZURE_REDIRECT_URI || window.location.origin;
 
@@ -87,11 +102,20 @@ export const graphScopes = {
 /**
  * Scopes for Azure Resource Manager API
  * - user_impersonation: Full access to Azure resources on behalf of the user
+ * - default: Used for Cloud Shell and other services requiring full access
  */
 export const azureManagementScopes = {
   userImpersonation: ['https://management.azure.com/user_impersonation'],
-  // Alternative scope format:
-  // default: ['https://management.azure.com/.default'],
+  // Default scope - required for Cloud Shell execution
+  default: ['https://management.azure.com/.default'],
+};
+
+/**
+ * Scopes for Azure Cloud Shell
+ * Required for provisioning and executing scripts in Cloud Shell
+ */
+export const cloudShellScopes = {
+  management: ['https://management.azure.com/.default'],
 };
 
 /**
